@@ -5,7 +5,9 @@ using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 using System.Web.Http;
+using HelloWorldBot.Dialogs;
 using Microsoft.Bot.Builder.Dialogs;
+using Microsoft.Bot.Builder.Luis.Models;
 using Microsoft.Bot.Connector;
 
 namespace HelloWorldBot
@@ -31,26 +33,21 @@ namespace HelloWorldBot
                 var haveGreeting = userData.GetProperty<bool>("HaveGreeting");
                 // Create text for a reply message   
                 StringBuilder strReplyMessage = new StringBuilder();
-                if (haveGreeting == false) 
+                if (haveGreeting == false)
                 {
                     strReplyMessage.Append($"Hi, how are you today?");
                     userData.SetProperty("HaveGreeting", true);
                 }
-                else 
+                else
                 {
-                    if (activity.Text.IndexOf("How are you", 0, StringComparison.CurrentCultureIgnoreCase) != -1)
-                    {
-                        strReplyMessage.Append("Great! Thank for asking");
-                    }
-                    else
-                    {
-                        strReplyMessage.Append($"You said: {activity.Text}");
-                    }
+                    await Conversation.SendAsync(activity, () => new MeBotLuisDialog());
                 }
 
                 // Save BotUserData
-                sc.BotState.SetPrivateConversationData(
-                    activity.ChannelId, activity.Conversation.Id, activity.From.Id, userData);
+                sc.BotState.SetPrivateConversationData(activity.ChannelId,
+                                                       activity.Conversation.Id,
+                                                       activity.From.Id,
+                                                       userData);
                 // Create a reply message
                 ConnectorClient connector = new ConnectorClient(new Uri(activity.ServiceUrl));
                 Activity replyMessage = activity.CreateReply(strReplyMessage.ToString());
@@ -97,5 +94,7 @@ namespace HelloWorldBot
 
             return null;
         }
+
+        
     }
 }
