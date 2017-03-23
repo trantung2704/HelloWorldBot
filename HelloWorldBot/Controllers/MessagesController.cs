@@ -1,57 +1,41 @@
 ﻿using System;
-using System.Globalization;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Security.Policy;
 using System.Text;
 using System.Threading.Tasks;
 using System.Web.Http;
 using HelloWorldBot.Dialogs;
 using Microsoft.Bot.Builder.Dialogs;
-using Microsoft.Bot.Builder.Luis.Models;
 using Microsoft.Bot.Connector;
 
-namespace HelloWorldBot
+namespace HelloWorldBot.Controllers
 {
     [BotAuthentication]
     public class MessagesController : ApiController
     {
-        /// <summary>
-        /// POST: api/Messages
-        /// Receive a message from a user and reply to it
-        /// </summary>
         public async Task<HttpResponseMessage> Post([FromBody]Activity activity)
         {
-            // Global values
             if (activity.Type == ActivityTypes.Message)
             {
-                // Get any saved values
-                StateClient sc = activity.GetStateClient();
-                BotData userData = sc.BotState.GetPrivateConversationData(activity.ChannelId,
-                                                                          activity.Conversation.Id,
-                                                                          activity.From.Id);
-
-                var haveGreeting = userData.GetProperty<bool>("HaveGreeting");
+                var userId = activity.From.Id;
+                var haveGreeting = DataManager.GetData<bool>(userId, "HaveGreeting");
                 // Create text for a reply message   
                 StringBuilder strReplyMessage = new StringBuilder();
                 if (haveGreeting == false)
                 {
-                    strReplyMessage.Append($"Hi, how are you today?");
-                    userData.SetProperty("HaveGreeting", true);
+                    strReplyMessage.Append("Hi, how are you today?");
+                    DataManager.SaveData(userId, "HaveGreeting", true);
+
+                    ConnectorClient connector = new ConnectorClient(new Uri(activity.ServiceUrl));
+                    Activity replyMessage = activity.CreateReply(strReplyMessage.ToString());
+                    await connector.Conversations.ReplyToActivityAsync(replyMessage);
                 }
                 else
                 {
-                    await Conversation.SendAsync(activity, () => new MeBotLuisDialog());
+                    await Conversation.SendAsync(activity, () => new DayNinjaDialog());
                 }
-
-                // Save BotUserData
-                sc.BotState.SetPrivateConversationData(activity.ChannelId,
-                                                       activity.Conversation.Id,
-                                                       activity.From.Id,
-                                                       userData);
-                // Create a reply message
-                ConnectorClient connector = new ConnectorClient(new Uri(activity.ServiceUrl));
-                Activity replyMessage = activity.CreateReply(strReplyMessage.ToString());
-                await connector.Conversations.ReplyToActivityAsync(replyMessage);
             }
             else
             {
@@ -70,8 +54,7 @@ namespace HelloWorldBot
         {
             if (message.Type == ActivityTypes.DeleteUserData)
             {
-                // Implement user deletion here
-                // If we handle user deletion, return a real message
+                DataManager.DeleteData(message.From.Id);
             }
             else if (message.Type == ActivityTypes.ConversationUpdate)
             {
