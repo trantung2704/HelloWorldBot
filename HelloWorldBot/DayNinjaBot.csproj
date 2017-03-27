@@ -136,8 +136,7 @@
   <ItemGroup>
     <Compile Include="App_Start\WebApiConfig.cs" />
     <Compile Include="Controllers\MessagesController.cs" />
-    <Compile Include="DataManager.cs" />
-    <Compile Include="Dialogs\CreateNewTask.cs" />
+    <Compile Include="DialogOptions\OfferAboutTagResult.cs" />
     <Compile Include="Dialogs\RootDialog.cs" />
     <Compile Include="Dialogs\DayNinjaDialog.cs" />
     <Compile Include="Global.asax.cs">
@@ -154,6 +153,15 @@
     <None Include="Web.Release.config">
       <DependentUpon>Web.config</DependentUpon>
     </None>
+  </ItemGroup>
+  <ItemGroup>
+    <WCFMetadata Include="Service References\" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DayNinjaBot.Business\DayNinjaBot.Business.csproj">
+      <Project>{723b8cf1-a4d4-438a-8b9e-138dd8c9cd85}</Project>
+      <Name>DayNinjaBot.Business</Name>
+    </ProjectReference>
   </ItemGroup>
   <PropertyGroup>
     <VisualStudioVersion Condition="'$(VisualStudioVersion)' == ''">10.0</VisualStudioVersion>

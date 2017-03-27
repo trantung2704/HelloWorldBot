@@ -19,65 +19,57 @@ namespace HelloWorldBot.Controllers
         {
             if (activity.Type == ActivityTypes.Message)
             {
-                var userId = activity.From.Id;
-                var haveGreeting = DataManager.GetData<bool>(userId, "HaveGreeting");
-                // Create text for a reply message   
-                StringBuilder strReplyMessage = new StringBuilder();
-                if (haveGreeting == false)
-                {
-                    strReplyMessage.Append("Hi, how are you today?");
-                    DataManager.SaveData(userId, "HaveGreeting", true);
-
-                    ConnectorClient connector = new ConnectorClient(new Uri(activity.ServiceUrl));
-                    Activity replyMessage = activity.CreateReply(strReplyMessage.ToString());
-                    await connector.Conversations.ReplyToActivityAsync(replyMessage);
-                }
-                else
-                {
-                    await Conversation.SendAsync(activity, () => new DayNinjaDialog());
-                }
+                await Conversation.SendAsync(activity, () => new DayNinjaDialog());
             }
             else
             {
-                Activity replyMessage = HandleSystemMessage(activity);
-                if (replyMessage != null)
-                {
-                    ConnectorClient connector = new ConnectorClient(new Uri(activity.ServiceUrl));
-                    await connector.Conversations.ReplyToActivityAsync(replyMessage);
-                }
+                await HandleSystemMessage(activity);
             }
             // Return response
             var response = Request.CreateResponse(HttpStatusCode.OK);
             return response;
         }
-        private Activity HandleSystemMessage(Activity message)
+
+        private async Task <Activity> HandleSystemMessage(Activity activity)
         {
-            if (message.Type == ActivityTypes.DeleteUserData)
+            if (activity.Type == ActivityTypes.DeleteUserData)
             {
-                DataManager.DeleteData(message.From.Id);
+                activity.Type = ActivityTypes.Message;
+                activity.Text = "Delete User Data";
+                await Conversation.SendAsync(activity, () => new DayNinjaDialog());
             }
-            else if (message.Type == ActivityTypes.ConversationUpdate)
+            else if (activity.Type == ActivityTypes.ConversationUpdate)
             {
-                // Handle conversation state changes, like members being added and removed
-                // Use Activity.MembersAdded and Activity.MembersRemoved and Activity.Action for info
-                // Not available in all channels
+                if (activity.MembersAdded.Any(m => m.Id == activity.Recipient.Id))
+                {
+                    activity.Type = ActivityTypes.Message;
+                    activity.Text = "Conversation Update";
+                    await Conversation.SendAsync(activity, () => new DayNinjaDialog());
+                }
             }
-            else if (message.Type == ActivityTypes.ContactRelationUpdate)
+            else if (activity.Type == ActivityTypes.ContactRelationUpdate)
             {
-                // Handle add/remove from contact lists
-                // Activity.From + Activity.Action represent what happened
+                if (activity.MembersAdded.Any(m => m.Id == activity.Recipient.Id))
+                {
+                    activity.Type = ActivityTypes.Message;
+                    activity.Text = "Conversation Update";
+                    await Conversation.SendAsync(activity, () => new DayNinjaDialog());
+                }
             }
-            else if (message.Type == ActivityTypes.Typing)
+            else if (activity.Type == ActivityTypes.Typing)
             {
-                // Handle knowing tha the user is typing
             }
-            else if (message.Type == ActivityTypes.Ping)
+            else if (activity.Type == ActivityTypes.Ping)
             {
+                if (activity.MembersAdded.Any(m => m.Id == activity.Recipient.Id))
+                {
+                    activity.Type = ActivityTypes.Message;
+                    activity.Text = "Conversation Update";
+                    await Conversation.SendAsync(activity, () => new DayNinjaDialog());
+                }
             }
 
             return null;
         }
-
-        
     }
 }
