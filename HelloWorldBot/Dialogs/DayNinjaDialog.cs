@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Data.SqlTypes;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Web.UI;
 using System.Web.UI.WebControls;
@@ -227,6 +228,35 @@ namespace HelloWorldBot.Dialogs
             context.Call(taskForm, AfterTaskForm);
         }
 
+        [LuisIntent("StartTimer")]
+        public async Task StartTimer(IDialogContext context, LuisResult result)
+        {
+            var taskTitle = context.Activity.AsMessageActivity().Text;
+            taskTitle = Regex.Replace(taskTitle, "start timer for ", string.Empty, RegexOptions.IgnoreCase);
+
+            var tasks = DbContext.Tasks.Where(i => i.Description == taskTitle);
+            if (!tasks.Any())
+            {
+                await context.PostAsync("There is no task like you describled");
+                context.Wait(MessageReceived);
+                return;
+            }
+            var task = tasks.FirstOrDefault();
+
+            DateTimeOffset lastStartTimer;
+            var canGetLastStartTimer = context.UserData.TryGetValue(DataKeyManager.LastStartTimer, out lastStartTimer);
+            if (canGetLastStartTimer && lastStartTimer.Date != DateTimeOffset.Now.Date)
+            {
+                await context.PostAsync("Remember you can tell me to switch or pause at any time, but it is best to remain focused on this single task!  ... so I'll shut up now until time is up.");                
+            }
+
+            context.UserData.SetValue(DataKeyManager.LastStartTimer, DateTimeOffset.UtcNow);
+            context.UserData.SetValue(DataKeyManager.CurrentTask, task);
+
+            await context.PostAsync($"Timer has been stared for: {task.Description}");
+            context.Wait(MessageReceived);
+        }
+
         private async Task AfterOfferKnowAboutTags(IDialogContext context, IAwaitable<string> result)
         {
             switch (await result)
@@ -373,8 +403,9 @@ namespace HelloWorldBot.Dialogs
                                       .Where(i => i.StartsWith("#"))
                                       .Select(i => i.Substring(1));
             taskDescription = taskDescription.ReplaceAll("#", string.Empty);
-            var capitalisedWords = taskDescription.Split(' ')
-                                                  .Where(i => char.IsUpper(i[0]));
+
+            var capitalisedWords = taskDescription.Split(' ').Where(i => char.IsUpper(i[0]));
+
             context.UserData.SetValue(DataKeyManager.CurrentTaskDescription, taskDescription);
 
             var newTask = new TaskViewModel
@@ -383,8 +414,10 @@ namespace HelloWorldBot.Dialogs
                 AddedByUserId = context.Activity.From.Id,
                 Created = DateTimeOffset.UtcNow
             };
+
             taskService.CreateNewTask(newTask);
             context.UserData.SetValue(DataKeyManager.CurrentTask, newTask);
+            context.UserData.SetValue(DataKeyManager.LastStartTimer, DateTimeOffset.UtcNow);
 
             await context.PostAsync($"Task with description: '{taskDescription}' has been created");
 
