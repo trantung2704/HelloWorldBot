@@ -100,8 +100,8 @@ namespace HelloWorldBot.Dialogs
                                   {
                                       card.ToAttachment()
                                   };
+
             await context.PostAsync(message);
-            context.Wait(MessageReceived);
         }
 
         [LuisIntent("HowCanI")]
@@ -133,27 +133,16 @@ namespace HelloWorldBot.Dialogs
 
         [LuisIntent("DefineTask")]
         public async Task DefineTask(IDialogContext context, LuisResult result)
-        {
-            bool knownAboutTags;
-            try
+        {            
+            EntityRecommendation taskDescriptionEntity;
+            if (result.TryFindEntity(LuisEntities.TaskTitle, out taskDescriptionEntity))
             {
-                knownAboutTags = context.UserData.Get<bool>(DataKeyManager.KnownAboutTags);
+                var description = PreProcessTitleEntity(taskDescriptionEntity);
+
+                await CreateTaskAsync(context, string.Join(" ", description));
             }
-            catch (Exception)
-            {
-                knownAboutTags = false;
-                context.UserData.SetValue(DataKeyManager.KnownAboutTags, false);
-            }            
-
-            const string defineTaskKeyword = "working on";
-            var text = context.Activity.AsMessageActivity().Text;
-
-            var startTaskDescrioptionIndex = text.LastIndexOf(defineTaskKeyword, StringComparison.InvariantCultureIgnoreCase);
-            var taskDescription = text.Substring(startTaskDescrioptionIndex + defineTaskKeyword.Length + 1);
-            
-            await CreateTaskAsync(context, taskDescription, knownAboutTags);
-        }        
-
+        }
+        
         [LuisIntent("DeleteUserData")]
         public async Task DeleteUserData(IDialogContext context, LuisResult result)
         {
@@ -231,10 +220,13 @@ namespace HelloWorldBot.Dialogs
         [LuisIntent("StartTimer")]
         public async Task StartTimer(IDialogContext context, LuisResult result)
         {
-            var taskTitle = context.Activity.AsMessageActivity().Text;
-            taskTitle = Regex.Replace(taskTitle, "start timer for ", string.Empty, RegexOptions.IgnoreCase);
+            EntityRecommendation taskTitleWithTagsEntity;
 
-            var tasks = DbContext.Tasks.Where(i => i.Description == taskTitle);
+            result.TryFindEntity(LuisEntities.TaskTitle, out taskTitleWithTagsEntity);
+
+            var taskTitle = PreProcessTitleEntity(taskTitleWithTagsEntity).Replace("#", string.Empty);
+
+            var tasks = DbContext.Tasks.Where(i => string.Compare(i.Description, taskTitle, StringComparison.CurrentCultureIgnoreCase) == 0);
             if (!tasks.Any())
             {
                 await context.PostAsync("There is no task like you describled");
@@ -264,10 +256,56 @@ namespace HelloWorldBot.Dialogs
                 case "Tell me more":
                     await WhatAreTags(context, null);
                     break;
-                case "Yes, I know":
-                    context.UserData.SetValue(DataKeyManager.KnownAboutTags, true);                  
+                case "Yes, I know":                    
+                    context.UserData.SetValue(DataKeyManager.KnownAboutTags, true);
                     break;
-            }            
+            }
+            await SuggestFocusTask(context);
+        }
+
+        private async Task SuggestFocusTask(IDialogContext context)
+        {
+            TaskViewModel suggestFocusTask;
+            if (context.UserData.TryGetValue(DataKeyManager.SuggestFocusTask, out suggestFocusTask))
+            {
+                var promptOptions = new[] { "Yes", "Not yet" };
+                var dialog = new PromptDialog.PromptChoice<string>(promptOptions, "Let's get focused!", null, 3);
+                context.Call(dialog, AfterOfferSuggestFocusOnTask);
+                return;
+            }
+
+            TaskViewModel currentTask;
+            if (context.UserData.TryGetValue(DataKeyManager.CurrentTask, out currentTask))
+            {
+                await context.PostAsync($"Timer has been start for {currentTask.Description}");
+            }
+            context.Wait(MessageReceived);
+        }
+
+        private async Task AfterOfferSuggestFocusOnTask(IDialogContext context, IAwaitable<string> result)
+        {
+            var suggestTask = context.UserData.Get<TaskViewModel>(DataKeyManager.SuggestFocusTask);
+            switch (await result)
+            {
+                case "Yes":
+                    DateTimeOffset lastStartTimer;
+                    var canGetLastStartTimer = context.UserData.TryGetValue(DataKeyManager.LastStartTimer, out lastStartTimer);
+                    if (canGetLastStartTimer && lastStartTimer.Date != DateTimeOffset.Now.Date)
+                    {
+                        await context.PostAsync("Remember you can tell me to switch or pause at any time, but it is best to remain focused on this single task!  ... so I'll shut up now until time is up.");
+                    }
+                    context.UserData.SetValue(DataKeyManager.LastStartTimer, DateTimeOffset.UtcNow);
+                    context.UserData.SetValue(DataKeyManager.CurrentTask, suggestTask);
+
+                    await context.PostAsync($"Timer has been stared for: {suggestTask.Description}");
+                    break;
+                case "Not yet":
+                    await context.PostAsync("No worries buddy you are the boss here! tell me what else is to do...");
+                    break;
+            }
+
+            context.UserData.RemoveValue(DataKeyManager.SuggestFocusTask);
+            context.Wait(MessageReceived);
         }
 
         private async Task AfterOfferTags(IDialogContext context, IAwaitable<string> result)
@@ -286,7 +324,8 @@ namespace HelloWorldBot.Dialogs
                         break;
                     }
                     TaskViewModel currentTask;
-                    if (!context.UserData.TryGetValue(DataKeyManager.CurrentTask, out currentTask))
+                    if (!context.UserData.TryGetValue(DataKeyManager.CurrentTask, out currentTask) &&
+                        !context.UserData.TryGetValue(DataKeyManager.SuggestFocusTask, out currentTask))
                     {
                         await context.PostAsync("There is an issue when process tags");
                         context.Wait(MessageReceived);
@@ -297,10 +336,10 @@ namespace HelloWorldBot.Dialogs
                     task.Tags = currentTags;
                     await context.PostAsync($"{currentTags.Count} tags has been link to task");
 
-                    context.UserData.SetValue(DataKeyManager.CurrentTags, new List<string>());
-                    context.Wait(MessageReceived);
+                    context.UserData.SetValue(DataKeyManager.CurrentTags, new List<string>());                    
                     break;
             }
+            await SuggestFocusTask(context);
         }
 
         private async Task AfterOfferTagCapitalWords(IDialogContext context, IAwaitable<string> result)
@@ -308,7 +347,6 @@ namespace HelloWorldBot.Dialogs
             switch (await result)
             {
                 case "No":
-                    context.Wait(MessageReceived);
                     break;
                 case "Yes":
                     List<string> currentTags;
@@ -319,7 +357,8 @@ namespace HelloWorldBot.Dialogs
                         break;
                     }
                     TaskViewModel currentTask;
-                    if (!context.UserData.TryGetValue(DataKeyManager.CurrentTask, out currentTask))
+                    if (!context.UserData.TryGetValue(DataKeyManager.CurrentTask, out currentTask)
+                        && !context.UserData.TryGetValue(DataKeyManager.SuggestFocusTask, out currentTask))
                     {
                         await context.PostAsync("There is an issue when process tags");
                         context.Wait(MessageReceived);
@@ -330,10 +369,10 @@ namespace HelloWorldBot.Dialogs
                     task.Tags = currentTags;
                     await context.PostAsync($"{currentTags.Count} tags has been link to task");
 
-                    context.UserData.SetValue(DataKeyManager.CurrentTags, new List<string>());
-                    context.Wait(MessageReceived);
+                    context.UserData.SetValue(DataKeyManager.CurrentTags, new List<string>());                    
                     break;
             }
+            await SuggestFocusTask(context);
 
         }
 
@@ -387,24 +426,28 @@ namespace HelloWorldBot.Dialogs
         private async Task AfterTaskForm(IDialogContext context, IAwaitable<TaskQuery> result)
         {
             var taskQuery = await result;
-
-            bool knownAboutTags;
-            if (!context.UserData.TryGetValue(DataKeyManager.KnownAboutTags, out knownAboutTags))
-            {
-                knownAboutTags = false;
-            }
-            await CreateTaskAsync(context, taskQuery.Description, knownAboutTags);
-
+            await CreateTaskAsync(context, taskQuery.Description, false);
         }
 
-        private async Task CreateTaskAsync(IDialogContext context, string taskDescription, bool knownAboutTags)
+        private async Task CreateTaskAsync(IDialogContext context, string taskDescription, bool startAfterCreate = true)
         {
+            bool knownAboutTags;
+            try
+            {
+                knownAboutTags = context.UserData.Get<bool>(DataKeyManager.KnownAboutTags);
+            }
+            catch (Exception)
+            {
+                knownAboutTags = false;
+                context.UserData.SetValue(DataKeyManager.KnownAboutTags, false);
+            }
+
             var tags = taskDescription.Split(' ')
                                       .Where(i => i.StartsWith("#"))
                                       .Select(i => i.Substring(1));
             taskDescription = taskDescription.ReplaceAll("#", string.Empty);
 
-            var capitalisedWords = taskDescription.Split(' ').Where(i => char.IsUpper(i[0]));
+            var capitalisedWords = tags.Where(i => char.IsUpper(i[0]));
 
             context.UserData.SetValue(DataKeyManager.CurrentTaskDescription, taskDescription);
 
@@ -416,8 +459,15 @@ namespace HelloWorldBot.Dialogs
             };
 
             taskService.CreateNewTask(newTask);
-            context.UserData.SetValue(DataKeyManager.CurrentTask, newTask);
-            context.UserData.SetValue(DataKeyManager.LastStartTimer, DateTimeOffset.UtcNow);
+            if (startAfterCreate)
+            {
+                context.UserData.SetValue(DataKeyManager.CurrentTask, newTask);
+                context.UserData.SetValue(DataKeyManager.LastStartTimer, DateTimeOffset.UtcNow);                
+            }
+            else
+            {
+                context.UserData.SetValue(DataKeyManager.SuggestFocusTask, newTask);
+            }
 
             await context.PostAsync($"Task with description: '{taskDescription}' has been created");
 
@@ -427,23 +477,9 @@ namespace HelloWorldBot.Dialogs
                 var dialog = new PromptDialog.PromptChoice<string>(promptOptions, "Did you know if you can markup tasks by writing #hashtags?", null, 3);
                 context.Call(dialog, AfterOfferKnowAboutTags);
             }
-            else if (tags.Any())
+            else if (tags.Any() && capitalisedWords.Any())
             {
                 context.UserData.SetValue(DataKeyManager.CurrentTags, tags);
-                var promptOptions = new[] { "Thanks", "What are tags?" };
-
-                var tagsString = string.Empty;
-                foreach (var tag in tags)
-                {
-                    tagsString += $"{tag}, ";
-                }
-
-                var dialog = new PromptDialog.PromptChoice<string>(promptOptions, $"I see you mentioned {tagsString}, I'll tag for your stats", null, 3);
-                context.Call(dialog, AfterOfferTags);
-            }
-            else if (!tags.Any() && capitalisedWords.Any())
-            {
-                context.UserData.SetValue(DataKeyManager.CurrentTags, capitalisedWords);
                 var promptOptions = new[] { "Yes", "No" };
 
                 var tagsString = string.Empty;
@@ -459,6 +495,24 @@ namespace HelloWorldBot.Dialogs
                                                                    3);
                 context.Call(dialog, AfterOfferTagCapitalWords);
             }
+            else if (tags.Any())
+            {
+                context.UserData.SetValue(DataKeyManager.CurrentTags, tags);
+                var promptOptions = new[] { "Thanks", "What are tags?" };
+
+                var tagsString = string.Empty;
+                foreach (var tag in tags)
+                {
+                    tagsString += $"{tag}, ";
+                }
+
+                var dialog = new PromptDialog.PromptChoice<string>(promptOptions, $"I see you mentioned {tagsString} I'll tag for your stats", null, 3);
+                context.Call(dialog, AfterOfferTags);
+            }
+            else
+            {
+                await SuggestFocusTask(context);
+            }
         }
 
         private IForm<TaskQuery> BuildTaskForm()
@@ -472,5 +526,25 @@ namespace HelloWorldBot.Dialogs
                 .OnCompletion(processAddTask)
                 .Build();
         }
+
+        private string PreProcessTitleEntity(EntityRecommendation taskDescription)
+        {
+            var tmpTaskDes = taskDescription.Entity.Split(' ');
+
+            for (int i = 0; i < tmpTaskDes.Length; i++)
+            {
+                if (tmpTaskDes[i] == "#")
+                {
+                    tmpTaskDes[i] = string.Empty;
+                    tmpTaskDes[i + 1] = $"#{tmpTaskDes[i + 1]}";
+                }
+            }
+
+            tmpTaskDes = tmpTaskDes.Where(i => !string.IsNullOrEmpty(i))
+                                   .ToArray();
+
+            return string.Join(" ", tmpTaskDes);
+        }
+
     }
 }
