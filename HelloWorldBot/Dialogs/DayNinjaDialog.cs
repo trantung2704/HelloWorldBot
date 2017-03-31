@@ -4,6 +4,7 @@ using System.Data.SqlTypes;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.Web.Script.Serialization;
 using System.Web.UI;
 using System.Web.UI.WebControls;
 using Chronic;
@@ -37,6 +38,11 @@ namespace HelloWorldBot.Dialogs
         [LuisIntent("Greeting")]
         public async Task Greeting(IDialogContext context, LuisResult result)
         {
+            //await context.PostAsync("you are");
+            //await context.PostAsync($"- Id: {context.Activity.From.Id}");
+            //await context.PostAsync($"- From: {context.Activity.From.Name}");            
+            //await context.PostAsync($"- ChannelData: {new JavaScriptSerializer().Serialize(context.Activity.ChannelData)}");            
+
             DateTimeOffset lastUpdate;
 
             var canGetLastUpdate = context.UserData.TryGetValue(DataKeyManager.LastUpdate, out lastUpdate);
@@ -139,7 +145,31 @@ namespace HelloWorldBot.Dialogs
             {
                 var description = PreProcessTitleEntity(taskDescriptionEntity);
 
-                await CreateTaskAsync(context, string.Join(" ", description));
+                var tasks = DbContext.Tasks.Where(i => string.Equals(description, i.Description, StringComparison.CurrentCultureIgnoreCase));
+
+                if (!tasks.Any())
+                {
+                    await CreateTaskAsync(context, string.Join(" ", description));
+                    return;
+                }
+                var task = tasks.First();
+
+                TaskViewModel currentTask;
+                if (context.UserData.TryGetValue(DataKeyManager.CurrentTask, out currentTask))
+                {
+                    var tagStrings = currentTask.Tags.Select(i => $"#{i}");
+
+                    await context.PostAsync($"OK, I'll pause this {string.Join(",", tagStrings)} {currentTask.Description} here.");
+                }
+
+                context.UserData.SetValue(DataKeyManager.CurrentTask, task);
+                await context.PostAsync($"Timer start for {task.Description}");
+                context.Wait(MessageReceived);
+            }
+            else
+            {
+                await context.PostAsync("Task description is not regconized");
+                context.Wait(MessageReceived);
             }
         }
         
@@ -246,6 +276,27 @@ namespace HelloWorldBot.Dialogs
             context.UserData.SetValue(DataKeyManager.CurrentTask, task);
 
             await context.PostAsync($"Timer has been stared for: {task.Description}");
+            context.Wait(MessageReceived);
+        }
+
+        [LuisIntent("ListMyTags")]
+        public async Task ListMyTags(IDialogContext context, LuisResult result)
+        {
+            TaskViewModel currenTask;
+            if(!context.UserData.TryGetValue(DataKeyManager.CurrentTask, out currenTask))
+            {
+                await context.PostAsync("you dont have active task right now");
+                context.Wait(MessageReceived);
+                return;
+            }
+            if(!currenTask.Tags.Any())
+            {
+                await context.PostAsync($"task {currenTask.Description} have any tag");
+                context.Wait(MessageReceived);
+                return;
+            }
+
+            await context.PostAsync($"Task {currenTask.Description} has following tasks: {string.Join(",", currenTask.Tags)}");
             context.Wait(MessageReceived);
         }
 
