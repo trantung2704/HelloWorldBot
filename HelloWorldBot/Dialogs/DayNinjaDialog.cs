@@ -38,11 +38,6 @@ namespace HelloWorldBot.Dialogs
         [LuisIntent("Greeting")]
         public async Task Greeting(IDialogContext context, LuisResult result)
         {
-            //await context.PostAsync("you are");
-            //await context.PostAsync($"- Id: {context.Activity.From.Id}");
-            //await context.PostAsync($"- From: {context.Activity.From.Name}");            
-            //await context.PostAsync($"- ChannelData: {new JavaScriptSerializer().Serialize(context.Activity.ChannelData)}");            
-
             DateTimeOffset lastUpdate;
 
             var canGetLastUpdate = context.UserData.TryGetValue(DataKeyManager.LastUpdate, out lastUpdate);
@@ -56,25 +51,31 @@ namespace HelloWorldBot.Dialogs
             TaskViewModel currentTask;
             if (context.UserData.TryGetValue(DataKeyManager.CurrentTask, out currentTask))
             {
-                var continueActiveTaskOption = new[] { "Yes", "No" };
+                var continueActiveTaskOption = new[] {"Yes", "No"};
                 var continueTaskDialog = new PromptDialog.PromptChoice<string>(continueActiveTaskOption, $"I assume you are still working on {currentTask.Description} right?  ", null, 3);
                 context.Call(continueTaskDialog, AfterConfirmActiveTask);
                 return;
             }
 
-            if (DbContext.Tasks.Count <= 1)
+            if (DbContext.Tasks.Count == 0)
             {
-                await context.PostAsync("So what are you working on?");
+                await context.PostAsync("So, what are you working on?");
                 context.Wait(MessageReceived);
-                return;
             }
+            else if (DbContext.Tasks.Count == 1)
+            {
+                context.UserData.SetValue(DataKeyManager.SuggestFocusTask, DbContext.Tasks.First());
 
-            var suggestTask = DbContext.Tasks.OrderByDescending(i => i.Created).First();
-            context.UserData.SetValue(DataKeyManager.SuggestTask, suggestTask);
-
-            var promptOptions = new[] { "Yes", "No", "List other pending tasks" };
-            var dialog = new PromptDialog.PromptChoice<string>(promptOptions, $"Shall we start on {suggestTask.Description}? ", null, 3);
-            context.Call(dialog, AfterConfirmSuggestTask);            
+                var promptOptions = new[] {"Yes", "Not yet"};
+                var dialog = new PromptDialog.PromptChoice<string>(promptOptions, $"Shall we start on {DbContext.Tasks.First() .Description}", null, 3);
+                context.Call(dialog, AfterOfferSuggestFocusOnTask);
+            }
+            else if (DbContext.Tasks.Count > 1)
+            {
+                var promptOptions = new[] {"Yes", "List tasks pending"};
+                var dialog = new PromptDialog.PromptChoice<string>(promptOptions, $"Shall we start on {DbContext.Tasks.First() .Description}", null, 3);
+                context.Call(dialog, AfterOfferSuggestFocusOnTask);
+            }            
         }
 
         [LuisIntent("ConversationUpdate")]
@@ -214,7 +215,7 @@ namespace HelloWorldBot.Dialogs
                 context.Wait(MessageReceived);
                 return;
             }
-            
+            context.UserData.RemoveValue(DataKeyManager.CurrentTask);
             context.UserData.SetValue(DataKeyManager.PausedTask, currentTask);
             await context.PostAsync($"{currentTask.Description} has been paused, you can type 'Resume timer' to continue your task");
             context.Wait(MessageReceived);
@@ -229,34 +230,13 @@ namespace HelloWorldBot.Dialogs
                 await context.PostAsync("You dont have active task to pause");
                 context.Wait(MessageReceived);
                 return;
-            }
+            }            
 
             var task = DbContext.Tasks.Find(i => i.Id == currentTask.Id);
-            DbContext.Tasks.Remove(task);
 
-            await context.PostAsync($"{currentTask.Description} has been stoped and removed from your task list.");
-
-            var remainTaskCount = DbContext.Tasks.Count;
-
-            if (remainTaskCount == 0)
-            {
-                await context.PostAsync("So, what are you doing now?");
-                context.Wait(MessageReceived);
-            }
-            else if (remainTaskCount == 1)
-            {
-                context.UserData.SetValue(DataKeyManager.SuggestFocusTask, DbContext.Tasks.First());
-
-                var promptOptions = new[] {"Yes", "Not yet"};
-                var dialog = new PromptDialog.PromptChoice<string>(promptOptions, $"Shall we start on {DbContext.Tasks.First() .Description}", null, 3);
-                context.Call(dialog, AfterOfferSuggestFocusOnTask);
-            }
-            else
-            {
-                var promptOptions = new[] { "Yes", "List tasks pendding" };
-                var dialog = new PromptDialog.PromptChoice<string>(promptOptions, $"Shall we start on {DbContext.Tasks.First().Description}", null, 3);
-                context.Call(dialog, AfterOfferSuggestFocusOnTask);
-            }
+            var confirmStopTaskOptions = new [] { "Pause", "Complete" };
+            var confirmStopTaskDialog = new PromptDialog.PromptChoice<string>(confirmStopTaskOptions, $"Shall I pause {task.Description} or mark as complete? ", null, 3);
+            context.Call(confirmStopTaskDialog, AfterConfirmStopTask);           
         }
 
         [LuisIntent("ResumeTimer")]
@@ -395,9 +375,9 @@ namespace HelloWorldBot.Dialogs
                     await context.PostAsync("No worries buddy you are the boss here! tell me what else is to do...");
                     context.Wait(MessageReceived);
                     break;
-                case "List tasks pendding":
-                    var penddingTaskOptions = DbContext.Tasks.Select(i => i.Description);
-                    var dialog = new PromptDialog.PromptChoice<string>(penddingTaskOptions, "Here are your pendding tasks: ", null, 3);
+                case "List tasks pending":
+                    var pending = DbContext.Tasks.Select(i => i.Description);
+                    var dialog = new PromptDialog.PromptChoice<string>(pending, "Here are your pending tasks: ", null, 3);
                     context.Call(dialog, AfterChoseTaskFromPendingList);
                     break;
             }
@@ -504,37 +484,6 @@ namespace HelloWorldBot.Dialogs
                     break;
             }
             context.Wait(MessageReceived);
-        }
-
-        private async Task AfterConfirmSuggestTask(IDialogContext context, IAwaitable<string> result)
-        {
-            switch (await result)
-            {
-                case "Yes":
-                    await context.PostAsync("I will start timer");
-                    context.Wait(MessageReceived);
-                    break;
-                case "No":                    
-                    await context.PostAsync("So what are you working on?");
-                    break;
-                case "List other pending tasks":
-                    var suggestTask = context.UserData.Get<TaskViewModel>(DataKeyManager.SuggestTask);
-
-                    var promptOptions = DbContext.Tasks.Where(i => i.Id != suggestTask.Id).Select(i => i.Description);
-
-                    var dialog = new PromptDialog.PromptChoice<string>(promptOptions, "Other Tasks:", null, 3);
-                    context.Call(dialog, AfterSelectTask);
-                    break;
-            }
-        }
-
-        private async Task AfterSelectTask(IDialogContext context, IAwaitable<string> result)
-        {
-            var taskDescription = await result;
-            var selectedTask = DbContext.Tasks.First(i => i.Description == taskDescription);
-            context.UserData.RemoveValue(DataKeyManager.SuggestTask);
-            context.UserData.SetValue(DataKeyManager.CurrentTask, selectedTask);
-            await context.PostAsync($"I will start timer for task: {taskDescription}");
         }
 
         private async Task AfterTaskForm(IDialogContext context, IAwaitable<TaskQuery> result)
@@ -660,5 +609,46 @@ namespace HelloWorldBot.Dialogs
             return string.Join(" ", tmpTaskDes);
         }
 
+        private async Task AfterConfirmStopTask(IDialogContext context, IAwaitable<string> result)
+        {
+            var currentTask = context.UserData.Get<TaskViewModel>(DataKeyManager.CurrentTask);
+            switch (await result)
+            {
+                case "Complete":
+                    var task = DbContext.Tasks.Find(i => i.Id == currentTask.Id);
+                    DbContext.Tasks.Remove(task);
+
+                    await context.PostAsync($"{currentTask.Description} has been stoped and removed from your task list.");
+
+                    var remainTaskCount = DbContext.Tasks.Count;
+
+                    if (remainTaskCount == 0)
+                    {
+                        await context.PostAsync("So, what are you working on?");
+                        context.Wait(MessageReceived);
+                    }
+                    else if (remainTaskCount == 1)
+                    {
+                        context.UserData.SetValue(DataKeyManager.SuggestFocusTask, DbContext.Tasks.First());
+
+                        var promptOptions = new[] { "Yes", "Not yet" };
+                        var dialog = new PromptDialog.PromptChoice<string>(promptOptions, $"Shall we start on {DbContext.Tasks.First().Description}", null, 3);
+                        context.Call(dialog, AfterOfferSuggestFocusOnTask);
+                    }
+                    else
+                    {
+                        var promptOptions = new[] { "Yes", "List tasks pending" };
+                        var dialog = new PromptDialog.PromptChoice<string>(promptOptions, $"Shall we start on {DbContext.Tasks.First().Description}", null, 3);
+                        context.Call(dialog, AfterOfferSuggestFocusOnTask);
+                    }
+                    break;
+                case "Pause":
+                    context.UserData.RemoveValue(DataKeyManager.CurrentTask);
+                    context.UserData.SetValue(DataKeyManager.PausedTask, currentTask);
+                    await context.PostAsync($"{currentTask.Description} has been paused, you can type 'Resume timer' to continue your task");
+                    context.Wait(MessageReceived);
+                    break;
+            }
+        }
     }
 }
