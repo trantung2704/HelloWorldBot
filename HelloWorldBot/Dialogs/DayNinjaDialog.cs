@@ -220,6 +220,45 @@ namespace HelloWorldBot.Dialogs
             context.Wait(MessageReceived);
         }
 
+        [LuisIntent("StopTimer")]
+        public async Task StopTimer(IDialogContext context, LuisResult result)
+        {
+            TaskViewModel currentTask;
+            if (!context.UserData.TryGetValue(DataKeyManager.CurrentTask, out currentTask))
+            {
+                await context.PostAsync("You dont have active task to pause");
+                context.Wait(MessageReceived);
+                return;
+            }
+
+            var task = DbContext.Tasks.Find(i => i.Id == currentTask.Id);
+            DbContext.Tasks.Remove(task);
+
+            await context.PostAsync($"{currentTask.Description} has been stoped and removed from your task list.");
+
+            var remainTaskCount = DbContext.Tasks.Count;
+
+            if (remainTaskCount == 0)
+            {
+                await context.PostAsync("So, what are you doing now?");
+                context.Wait(MessageReceived);
+            }
+            else if (remainTaskCount == 1)
+            {
+                context.UserData.SetValue(DataKeyManager.SuggestFocusTask, DbContext.Tasks.First());
+
+                var promptOptions = new[] {"Yes", "Not yet"};
+                var dialog = new PromptDialog.PromptChoice<string>(promptOptions, $"Shall we start on {DbContext.Tasks.First() .Description}", null, 3);
+                context.Call(dialog, AfterOfferSuggestFocusOnTask);
+            }
+            else
+            {
+                var promptOptions = new[] { "Yes", "List tasks pendding" };
+                var dialog = new PromptDialog.PromptChoice<string>(promptOptions, $"Shall we start on {DbContext.Tasks.First().Description}", null, 3);
+                context.Call(dialog, AfterOfferSuggestFocusOnTask);
+            }
+        }
+
         [LuisIntent("ResumeTimer")]
         public async Task ResumeTimer(IDialogContext context, LuisResult result)
         {
@@ -275,7 +314,7 @@ namespace HelloWorldBot.Dialogs
             context.UserData.SetValue(DataKeyManager.LastStartTimer, DateTimeOffset.UtcNow);
             context.UserData.SetValue(DataKeyManager.CurrentTask, task);
 
-            await context.PostAsync($"Timer has been stared for: {task.Description}");
+            await context.PostAsync($"Timer has stared for: {task.Description}");
             context.Wait(MessageReceived);
         }
 
@@ -285,18 +324,18 @@ namespace HelloWorldBot.Dialogs
             TaskViewModel currenTask;
             if(!context.UserData.TryGetValue(DataKeyManager.CurrentTask, out currenTask))
             {
-                await context.PostAsync("you dont have active task right now");
+                await context.PostAsync("you dont have an active task right now");
                 context.Wait(MessageReceived);
                 return;
             }
             if(!currenTask.Tags.Any())
             {
-                await context.PostAsync($"task {currenTask.Description} have any tag");
+                await context.PostAsync($"task {currenTask.Description} dose not have any tag");
                 context.Wait(MessageReceived);
                 return;
             }
 
-            await context.PostAsync($"Task {currenTask.Description} has following tasks: {string.Join(",", currenTask.Tags)}");
+            await context.PostAsync($"Task {currenTask.Description} has following tasks: {string.Join(";", currenTask.Tags)}");
             context.Wait(MessageReceived);
         }
 
@@ -328,14 +367,15 @@ namespace HelloWorldBot.Dialogs
             TaskViewModel currentTask;
             if (context.UserData.TryGetValue(DataKeyManager.CurrentTask, out currentTask))
             {
-                await context.PostAsync($"Timer has been start for {currentTask.Description}");
+                await context.PostAsync($"Timer has started for {currentTask.Description}");
             }
             context.Wait(MessageReceived);
         }
 
         private async Task AfterOfferSuggestFocusOnTask(IDialogContext context, IAwaitable<string> result)
         {
-            var suggestTask = context.UserData.Get<TaskViewModel>(DataKeyManager.SuggestFocusTask);
+            TaskViewModel suggestTask;
+            context.UserData.TryGetValue(DataKeyManager.SuggestFocusTask, out suggestTask);
             switch (await result)
             {
                 case "Yes":
@@ -348,14 +388,30 @@ namespace HelloWorldBot.Dialogs
                     context.UserData.SetValue(DataKeyManager.LastStartTimer, DateTimeOffset.UtcNow);
                     context.UserData.SetValue(DataKeyManager.CurrentTask, suggestTask);
 
-                    await context.PostAsync($"Timer has been stared for: {suggestTask.Description}");
+                    await context.PostAsync($"Timer has stared for: {suggestTask.Description}");
+                    context.Wait(MessageReceived);
                     break;
                 case "Not yet":
                     await context.PostAsync("No worries buddy you are the boss here! tell me what else is to do...");
+                    context.Wait(MessageReceived);
+                    break;
+                case "List tasks pendding":
+                    var penddingTaskOptions = DbContext.Tasks.Select(i => i.Description);
+                    var dialog = new PromptDialog.PromptChoice<string>(penddingTaskOptions, "Here are your pendding tasks: ", null, 3);
+                    context.Call(dialog, AfterChoseTaskFromPendingList);
                     break;
             }
 
-            context.UserData.RemoveValue(DataKeyManager.SuggestFocusTask);
+            context.UserData.RemoveValue(DataKeyManager.SuggestFocusTask);            
+        }
+
+        private async Task AfterChoseTaskFromPendingList(IDialogContext context, IAwaitable<string> result)
+        {
+            var taskDescription = await result;
+            var task = DbContext.Tasks.First(i => string.Compare(taskDescription, i.Description, StringComparison.CurrentCultureIgnoreCase)==0);
+
+            context.UserData.SetValue(DataKeyManager.CurrentTask, task);
+            await context.PostAsync($"Timer has started for {task.Description}");
             context.Wait(MessageReceived);
         }
 
@@ -385,7 +441,14 @@ namespace HelloWorldBot.Dialogs
 
                     var task = DbContext.Tasks.First(i => i.Id == currentTask.Id);
                     task.Tags = currentTags;
-                    await context.PostAsync($"{currentTags.Count} tags has been link to task");
+                    if (currentTags.Count == 1)
+                    {
+                        await context.PostAsync($"{currentTags.Count} has been linked to task");
+                    }
+                    else
+                    {
+                        await context.PostAsync($"{currentTags.Count} have been linked to task");
+                    }                    
 
                     context.UserData.SetValue(DataKeyManager.CurrentTags, new List<string>());                    
                     break;
@@ -436,7 +499,7 @@ namespace HelloWorldBot.Dialogs
                     break;
                 case "No":                    
                     context.UserData.RemoveValue(DataKeyManager.CurrentTask);
-                    await context.PostAsync("Timer has been stoped");
+                    await context.PostAsync("Timer has stoped");
                     await context.PostAsync("So what are you working on?");
                     break;
             }
