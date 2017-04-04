@@ -477,8 +477,12 @@ namespace HelloWorldBot.Dialogs
                 case "Yes":
                     await context.PostAsync("I will keep timer running");                    
                     break;
-                case "No":                    
+                case "No":
+                    var currentTask = context.UserData.Get<TaskViewModel>(DataKeyManager.CurrentTask);
+
+                    DbContext.Tasks.Remove(currentTask);
                     context.UserData.RemoveValue(DataKeyManager.CurrentTask);
+
                     await context.PostAsync("Timer has stoped");
                     await context.PostAsync("So what are you working on?");
                     break;
