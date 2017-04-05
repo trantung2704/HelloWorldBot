@@ -57,23 +57,25 @@ namespace HelloWorldBot.Dialogs
                 return;
             }
 
-            if (DbContext.Tasks.Count == 0)
+            var userId = context.Activity.From.Id;
+            var taskCount = taskService.GetTaskCount(userId);
+            if (taskCount == 0)
             {
                 await context.PostAsync("So, what are you working on?");
                 context.Wait(MessageReceived);
             }
-            else if (DbContext.Tasks.Count == 1)
+            else if (taskCount == 1)
             {
-                context.UserData.SetValue(DataKeyManager.SuggestFocusTask, DbContext.Tasks.First());
+                context.UserData.SetValue(DataKeyManager.SuggestFocusTask, taskService.GetFirstTask(userId));
 
                 var promptOptions = new[] {"Yes", "Not yet"};
-                var dialog = new PromptDialog.PromptChoice<string>(promptOptions, $"Shall we start on {DbContext.Tasks.First() .Description}?", null, 3);
+                var dialog = new PromptDialog.PromptChoice<string>(promptOptions, $"Shall we start on {taskService.GetFirstTask(userId).Description}?", null, 3);
                 context.Call(dialog, AfterOfferSuggestFocusOnTask);
             }
-            else if (DbContext.Tasks.Count > 1)
+            else if (taskCount > 1)
             {
                 var promptOptions = new[] {"Yes", "List tasks pending"};
-                var dialog = new PromptDialog.PromptChoice<string>(promptOptions, $"Shall we start on {DbContext.Tasks.First() .Description}?", null, 3);
+                var dialog = new PromptDialog.PromptChoice<string>(promptOptions, $"Shall we start on {taskService.GetFirstTask(userId).Description}?", null, 3);
                 context.Call(dialog, AfterOfferSuggestFocusOnTask);
             }            
         }
@@ -140,20 +142,21 @@ namespace HelloWorldBot.Dialogs
 
         [LuisIntent("DefineTask")]
         public async Task DefineTask(IDialogContext context, LuisResult result)
-        {            
+        {
+            var userId = context.Activity.From.Id;
             EntityRecommendation taskDescriptionEntity;
             if (result.TryFindEntity(LuisEntities.TaskTitle, out taskDescriptionEntity))
             {
                 var description = PreProcessTitleEntity(taskDescriptionEntity);
 
-                var tasks = DbContext.Tasks.Where(i => string.Equals(description, i.Description, StringComparison.CurrentCultureIgnoreCase));
+                var tasks = taskService.GetTasks(userId, description);
 
                 if (!tasks.Any())
                 {
                     await CreateTaskAsync(context, string.Join(" ", description));
                     return;
                 }
-                var task = tasks.First();
+                var task = taskService.GetFirstTask(userId);
 
                 TaskViewModel currentTask;
                 if (context.UserData.TryGetValue(DataKeyManager.CurrentTask, out currentTask))
@@ -178,7 +181,7 @@ namespace HelloWorldBot.Dialogs
         public async Task DeleteUserData(IDialogContext context, LuisResult result)
         {
             context.UserData.Clear();
-            DbContext.Tasks.RemoveAll(i => i.AddedByUserId == context.Activity.From.Id);
+            taskService.RemoveTasks(context.Activity.From.Id);
             await context.PostAsync("User data has been deleted");
         }
 
@@ -186,7 +189,7 @@ namespace HelloWorldBot.Dialogs
         public async Task ListTasks(IDialogContext context, LuisResult result)
         {
             TaskViewModel task;
-            var remainTaskCount = DbContext.Tasks.Count;
+            var remainTaskCount = taskService.GetTaskCount(context.Activity.From.Id);
             if (context.UserData.TryGetValue(DataKeyManager.CurrentTask, out task))
             {
                 await context.PostAsync($"Current tasks is: {task.Description}");
@@ -200,17 +203,19 @@ namespace HelloWorldBot.Dialogs
                 return;
             }
 
-            if (DbContext.Tasks.Count == 1)
+            if (remainTaskCount == 1)
             {
                 await context.PostAsync("You have following task:");
             }
 
-            if (DbContext.Tasks.Count > 1)
+            if (remainTaskCount > 1)
             {
                 await context.PostAsync("You have following tasks:");
             }
 
-            foreach (var taskViewModel in DbContext.Tasks)
+            var userId = context.Activity.From.Id;
+            var tasks = taskService.GetTasks(userId);
+            foreach (var taskViewModel in tasks)
             {
                 if (task == null || taskViewModel.Id != task.Id)
                 {
@@ -248,7 +253,7 @@ namespace HelloWorldBot.Dialogs
                 return;
             }            
 
-            var task = DbContext.Tasks.Find(i => i.Id == currentTask.Id);
+            var task = taskService.GetTask(currentTask.Id);
 
             var confirmStopTaskOptions = new [] { "Pause", "Complete" };
             var confirmStopTaskDialog = new PromptDialog.PromptChoice<string>(confirmStopTaskOptions, $"Shall I pause {task.Description} or mark as complete? ", null, 3);
@@ -289,10 +294,12 @@ namespace HelloWorldBot.Dialogs
 
             result.TryFindEntity(LuisEntities.TaskTitle, out taskTitleWithTagsEntity);
 
-            var taskTitle = PreProcessTitleEntity(taskTitleWithTagsEntity).Replace("#", string.Empty);
+            var taskDescription = PreProcessTitleEntity(taskTitleWithTagsEntity).Replace("#", string.Empty);
 
-            var tasks = DbContext.Tasks.Where(i => string.Compare(i.Description, taskTitle, StringComparison.CurrentCultureIgnoreCase) == 0);
-            if (!tasks.Any())
+            var userId = context.Activity.From.Id;
+            var tasks = taskService.GetTasks(userId, taskDescription);
+
+            if (taskService.GetTaskCount(userId)> 0)
             {
                 await context.PostAsync("There is no task like you describled");
                 context.Wait(MessageReceived);
@@ -387,13 +394,15 @@ namespace HelloWorldBot.Dialogs
                     await context.PostAsync($"Timer has stared for: {suggestTask.Description}");
                     context.Wait(MessageReceived);
                     break;
+
                 case "Not yet":
                     await context.PostAsync("No worries buddy you are the boss here! tell me what you are working on once you start.");
                     context.Wait(MessageReceived);
                     break;
+
                 case "List tasks pending":
-                    var pending = DbContext.Tasks.Select(i => i.Description);
-                    var dialog = new PromptDialog.PromptChoice<string>(pending, "Here are your pending tasks: ", null, 3);
+                    var pendingDescripotionTasks = taskService.GetTasks(context.Activity.From.Id).Select(i => i.Description);
+                    var dialog = new PromptDialog.PromptChoice<string>(pendingDescripotionTasks, "Here are your pending tasks: ", null, 3);
                     context.Call(dialog, AfterChoseTaskFromPendingList);
                     break;
             }
@@ -404,10 +413,10 @@ namespace HelloWorldBot.Dialogs
         private async Task AfterChoseTaskFromPendingList(IDialogContext context, IAwaitable<string> result)
         {
             var taskDescription = await result;
-            var task = DbContext.Tasks.First(i => string.Compare(taskDescription, i.Description, StringComparison.CurrentCultureIgnoreCase)==0);
+            var tasks = taskService.GetTasks(context.Activity.From.Id, taskDescription);
 
-            context.UserData.SetValue(DataKeyManager.CurrentTask, task);
-            await context.PostAsync($"Timer has started for {task.Description}");
+            context.UserData.SetValue(DataKeyManager.CurrentTask, tasks.First());
+            await context.PostAsync($"Timer has started for {tasks.First().Description}");
             context.Wait(MessageReceived);
         }
 
@@ -435,7 +444,7 @@ namespace HelloWorldBot.Dialogs
                         break;
                     }
 
-                    var task = DbContext.Tasks.First(i => i.Id == currentTask.Id);
+                    var task = taskService.GetTask(currentTask.Id);
                     task.Tags = currentTags;
                     if (currentTags.Count == 1)
                     {
@@ -475,7 +484,7 @@ namespace HelloWorldBot.Dialogs
                         break;
                     }
 
-                    var task = DbContext.Tasks.First(i => i.Id == currentTask.Id);
+                    var task = taskService.GetTask(currentTask.Id);
                     task.Tags = currentTags;
                     await context.PostAsync($"{currentTags.Count} tags has been link to task");
 
@@ -496,7 +505,7 @@ namespace HelloWorldBot.Dialogs
                 case "No":
                     var currentTask = context.UserData.Get<TaskViewModel>(DataKeyManager.CurrentTask);
 
-                    DbContext.Tasks.Remove(currentTask);
+                    taskService.RemoveTask(currentTask.Id);
                     context.UserData.RemoveValue(DataKeyManager.CurrentTask);
 
                     await context.PostAsync("Timer has stopped");
@@ -538,7 +547,8 @@ namespace HelloWorldBot.Dialogs
             {
                 Description = taskDescription,
                 AddedByUserId = context.Activity.From.Id,
-                Created = DateTimeOffset.UtcNow
+                Created = DateTimeOffset.UtcNow,
+                UserId =  context.Activity.From.Id
             };
 
             taskService.CreateNewTask(newTask);
@@ -635,13 +645,12 @@ namespace HelloWorldBot.Dialogs
             context.UserData.RemoveValue(DataKeyManager.CurrentTask);
             switch (await result)
             {
-                case "Complete":
-                    var task = DbContext.Tasks.Find(i => i.Id == currentTask.Id);
-                    DbContext.Tasks.Remove(task);
+                case "Complete":                    
+                    taskService.RemoveTask(currentTask.Id);
 
                     await context.PostAsync($"{currentTask.Description} has been stopped and removed from your task list.");
 
-                    var remainTaskCount = DbContext.Tasks.Count;
+                    var remainTaskCount = taskService.GetTaskCount(context.Activity.From.Id);
 
                     if (remainTaskCount == 0)
                     {
@@ -650,16 +659,16 @@ namespace HelloWorldBot.Dialogs
                     }
                     else if (remainTaskCount == 1)
                     {
-                        context.UserData.SetValue(DataKeyManager.SuggestFocusTask, DbContext.Tasks.First());
+                        context.UserData.SetValue(DataKeyManager.SuggestFocusTask, taskService.GetFirstTask(context.Activity.From.Id));
 
                         var promptOptions = new[] { "Yes", "Not yet" };
-                        var dialog = new PromptDialog.PromptChoice<string>(promptOptions, $"Shall we start on {DbContext.Tasks.First().Description}?", null, 3);
+                        var dialog = new PromptDialog.PromptChoice<string>(promptOptions, $"Shall we start on {taskService.GetFirstTask(context.Activity.From.Id)}?", null, 3);
                         context.Call(dialog, AfterOfferSuggestFocusOnTask);
                     }
                     else
                     {
                         var promptOptions = new[] { "Yes", "List tasks pending" };
-                        var dialog = new PromptDialog.PromptChoice<string>(promptOptions, $"Shall we start on {DbContext.Tasks.First().Description}?", null, 3);
+                        var dialog = new PromptDialog.PromptChoice<string>(promptOptions, $"Shall we start on {taskService.GetFirstTask(context.Activity.From.Id)}?", null, 3);
                         context.Call(dialog, AfterOfferSuggestFocusOnTask);
                     }
                     break;

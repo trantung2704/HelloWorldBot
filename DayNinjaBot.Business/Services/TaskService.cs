@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using PayNinja.Business.ViewModels;
 
 namespace DayNinjaBot.Business.Services
@@ -16,6 +18,44 @@ namespace DayNinjaBot.Business.Services
             }
             DbContext.Tasks.Add(task);
             return (int) task.Id;
+        }
+
+        public int GetTaskCount(string userId)
+        {
+            return DbContext.Tasks.Count(i => i.UserId == userId);
+        }
+
+        public TaskViewModel GetFirstTask(string userId)
+        {
+            return DbContext.Tasks.First(i => i.UserId == userId);
+        }
+
+        public List<TaskViewModel> GetTasks(string userId, string description)
+        {
+            return DbContext.Tasks.Where(i => i.UserId == userId &&
+                                              string.Equals(description, i.Description, StringComparison.CurrentCultureIgnoreCase))
+                            .ToList();
+        }
+
+        public void RemoveTasks(string userId)
+        {
+            DbContext.Tasks.RemoveAll(i => i.UserId == userId);
+        }
+
+        public List<TaskViewModel> GetTasks(string userId)
+        {
+            return DbContext.Tasks.Where(i => i.UserId == userId).ToList();
+        }
+
+        public TaskViewModel GetTask(long id)
+        {
+            return DbContext.Tasks.First(i => i.Id == id);
+        }
+
+        public void RemoveTask(long id)
+        {
+            var removedTask = DbContext.Tasks.First(i => i.Id == id);
+            DbContext.Tasks.Remove(removedTask);
         }
     }
 }

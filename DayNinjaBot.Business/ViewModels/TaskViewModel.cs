@@ -66,5 +66,7 @@ namespace PayNinja.Business.ViewModels
         public TimeSpan? TotalTime { get; set; }  // only populated in the GET response  (ie. Don't POST or PUT)
 
         public List<string> Tags { get; set; }
+
+        public string UserId { get; set; }
     }
 }
