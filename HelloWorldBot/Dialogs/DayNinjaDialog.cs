@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Data.SqlTypes;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
@@ -10,6 +11,7 @@ using System.Web.UI.WebControls;
 using Chronic;
 using DayNinjaBot.Business;
 using DayNinjaBot.Business.Services;
+using Hangfire;
 using HelloWorldBot.Queries;
 using Microsoft.Bot.Builder.Dialogs;
 using Microsoft.Bot.Builder.FormFlow;
@@ -17,6 +19,7 @@ using Microsoft.Bot.Builder.Luis;
 using Microsoft.Bot.Builder.Luis.Models;
 using Microsoft.Bot.Builder.Scorables;
 using Microsoft.Bot.Connector;
+using Newtonsoft.Json;
 using PayNinja.Business.ViewModels;
 
 namespace HelloWorldBot.Dialogs
@@ -236,10 +239,40 @@ namespace HelloWorldBot.Dialogs
                 context.Wait(MessageReceived);
                 return;
             }
+
             context.UserData.RemoveValue(DataKeyManager.CurrentTask);
             context.UserData.SetValue(DataKeyManager.PausedTask, currentTask);
+
             await context.PostAsync($"{currentTask.Description} has been paused, you can type 'Resume timer' to continue your task");
-            context.Wait(MessageReceived);
+            var options = new[] { "OK", "Remind me in 10", "Remind me in 15" };
+            var dialog = new PromptDialog.PromptChoice<string>(options, "OK I will remind you to resume in 5 mins", null, 3);
+            context.Call(dialog, AfterChoseRemindTimeAfterPauseTask);            
+        }
+
+        public async Task AfterChoseRemindTimeAfterPauseTask(IDialogContext context, IAwaitable<string> result)
+        {
+            var resume = new ResumptionCookie(context.Activity.AsMessageActivity());
+
+            var options = new Dictionary<string, string>
+                          {
+                              {"Yes resume", "Resume"},
+                              {"No I am working on something else", "DeclineResume"}
+                          };
+            var pauseTask = context.UserData.Get<TaskViewModel>(DataKeyManager.PausedTask);
+
+            var message = $"Let's go back to work on {pauseTask.Description}";
+            switch (await result)
+            {
+                case "OK":                    
+                    BackgroundJob.Schedule(() => CreateCardReply(resume, string.Empty, message, options), TimeSpan.FromSeconds(5));
+                    break;
+                case "Remind me in 10":
+                    BackgroundJob.Schedule(() => CreateCardReply(resume, string.Empty, message, options), TimeSpan.FromSeconds(5));
+                    break;
+                case "Remind me in 15":
+                    BackgroundJob.Schedule(() => CreateCardReply(resume, string.Empty, message, options), TimeSpan.FromSeconds(5));
+                    break;
+            }
         }
 
         [LuisIntent("StopTimer")]
@@ -339,6 +372,19 @@ namespace HelloWorldBot.Dialogs
             }
 
             await context.PostAsync($"Task {currenTask.Description} has following tasks: {string.Join(";", currenTask.Tags)}");
+            context.Wait(MessageReceived);
+        }
+
+        [LuisIntent("DeclineResume")]
+
+        public async Task DeclineResume(IDialogContext context, LuisResult result)
+        {
+            TaskViewModel pausedTask;
+            if (context.UserData.TryGetValue(DataKeyManager.PausedTask, out pausedTask))
+            {
+                context.UserData.RemoveValue(DataKeyManager.PausedTask);
+                await context.PostAsync($"So what are you working on?");                
+            }            
             context.Wait(MessageReceived);
         }
 
@@ -679,6 +725,69 @@ namespace HelloWorldBot.Dialogs
                     context.Wait(MessageReceived);
                     break;
             }
+        }
+
+        public void CreateReply(ResumptionCookie resume, string message)
+        {
+            var data = JsonConvert.SerializeObject(resume);
+
+            dynamic resumeData = JsonConvert.DeserializeObject(data);
+            string botId = resumeData.address.botId;
+            string channelId = resumeData.address.channelId;
+            string userId = resumeData.address.userId;
+            string conversationId = resumeData.address.conversationId;
+            string serviceUrl = resumeData.address.serviceUrl;
+            string userName = resumeData.userName;
+            bool isGroup = resumeData.isGroup;
+
+            var restoreResume = new ResumptionCookie(new Address(botId, channelId, userId, conversationId, serviceUrl), userName, isGroup, "en_GB");
+
+            var messageactivity = restoreResume.GetMessage();
+            var reply = messageactivity.CreateReply();
+
+            reply.Text = message;
+
+            var client = new ConnectorClient(new Uri(messageactivity.ServiceUrl));
+            client.Conversations.ReplyToActivity(reply);
+        }
+
+        public void CreateCardReply(ResumptionCookie resume, string title, string text, Dictionary<string,string> options)
+        {
+            var data = JsonConvert.SerializeObject(resume);
+
+            dynamic resumeData = JsonConvert.DeserializeObject(data);
+            string botId = resumeData.address.botId;
+            string channelId = resumeData.address.channelId;
+            string userId = resumeData.address.userId;
+            string conversationId = resumeData.address.conversationId;
+            string serviceUrl = resumeData.address.serviceUrl;
+            string userName = resumeData.userName;
+            bool isGroup = resumeData.isGroup;
+
+            var restoreResume = new ResumptionCookie(new Address(botId, channelId, userId, conversationId, serviceUrl), userName, isGroup, "en_GB");
+
+            var messageactivity = restoreResume.GetMessage();
+            var reply = messageactivity.CreateReply();
+
+            var buttons = options.Select(i => new CardAction
+                                              {
+                                                  Type = ActionTypes.PostBack,
+                                                  Title = i.Key,
+                                                  Value = i.Value
+                                              })
+                                 .ToList();
+
+            var card = new HeroCard
+            {
+                Title = title,
+                Text = text,
+                Buttons = buttons
+            };
+            reply.Attachments = new List<Attachment> { card.ToAttachment() };
+
+
+            var client = new ConnectorClient(new Uri(messageactivity.ServiceUrl));
+            client.Conversations.ReplyToActivity(reply);
         }
     }
 }
