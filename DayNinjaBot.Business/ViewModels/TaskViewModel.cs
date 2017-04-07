@@ -68,5 +68,14 @@ namespace PayNinja.Business.ViewModels
         public List<string> Tags { get; set; }
 
         public string UserId { get; set; }
+
+        public List<TimeLog> TimeLogs { get; set; }
+    }
+
+    public class TimeLog
+    {
+        public DateTimeOffset StartTime { get; set; }
+
+        public DateTimeOffset EndTime { get; set; }
     }
 }

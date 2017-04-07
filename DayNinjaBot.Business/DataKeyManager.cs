@@ -19,5 +19,9 @@
         public static string LastStartTimer => "LastStartTimer";
 
         public static string SuggestFocusTask => "SuggestFocusTask";
+
+        public static string StartTimer => "StarTimer";
+
+        public static string InformDurationStartTime => "InformDuartion";
     }
 }

@@ -3,5 +3,7 @@
     public static class LuisEntities
     {
         public static string TaskTitle => "TaskTitle";
+
+        public static string DelayBreakMinutes => "DelayBreakMinutes";
     }
 }

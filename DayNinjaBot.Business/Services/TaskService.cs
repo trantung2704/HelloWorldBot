@@ -16,6 +16,7 @@ namespace DayNinjaBot.Business.Services
             {
                 task.Tags = new List<string>();
             }
+            task.TimeLogs = new List<TimeLog>();
             DbContext.Tasks.Add(task);
             return (int) task.Id;
         }
@@ -56,6 +57,14 @@ namespace DayNinjaBot.Business.Services
         {
             var removedTask = DbContext.Tasks.First(i => i.Id == id);
             DbContext.Tasks.Remove(removedTask);
+        }
+
+        public void UpdateTask(TaskViewModel task)
+        {
+            var entity = DbContext.Tasks.First(i => i.Id == task.Id);
+            DbContext.Tasks.Remove(entity);
+
+            DbContext.Tasks.Add(task);
         }
     }
 }

@@ -11,6 +11,7 @@ using System.Web.UI.WebControls;
 using Chronic;
 using DayNinjaBot.Business;
 using DayNinjaBot.Business.Services;
+using DayNinjaBot.Business.ViewModels;
 using Hangfire;
 using HelloWorldBot.Queries;
 using Microsoft.Bot.Builder.Dialogs;
@@ -39,7 +40,7 @@ namespace HelloWorldBot.Dialogs
         }
 
         [LuisIntent("Greeting")]
-        public async Task Greeting(IDialogContext context, LuisResult result)
+        public async Task Greeting(IDialogContext context, LuisResult result) 
         {
             DateTimeOffset lastUpdate;
 
@@ -170,6 +171,11 @@ namespace HelloWorldBot.Dialogs
                 }
 
                 context.UserData.SetValue(DataKeyManager.CurrentTask, task);
+                RegisterTrackTimeProcesses(context);
+
+                context.UserData.SetValue(DataKeyManager.LastStartTimer, task);
+                context.UserData.SetValue(DataKeyManager.StartTimer, DateTimeOffset.UtcNow);                
+
                 await context.PostAsync($"Timer start for {task.Description}");
                 context.Wait(MessageReceived);
             }
@@ -179,7 +185,7 @@ namespace HelloWorldBot.Dialogs
                 context.Wait(MessageReceived);
             }
         }
-        
+
         [LuisIntent("DeleteUserData")]
         public async Task DeleteUserData(IDialogContext context, LuisResult result)
         {
@@ -240,6 +246,16 @@ namespace HelloWorldBot.Dialogs
                 return;
             }
 
+            var informDuartionStarTime = context.UserData.Get<DateTimeOffset>(DataKeyManager.InformDurationStartTime);
+            currentTask.TimeLogs.Add(new TimeLog
+                                     {
+                                         StartTime = informDuartionStarTime,
+                                         EndTime = DateTimeOffset.UtcNow
+                                     });
+            taskService.UpdateTask(currentTask);
+            context.UserData.RemoveValue(DataKeyManager.InformDurationStartTime);
+
+
             context.UserData.RemoveValue(DataKeyManager.CurrentTask);
             context.UserData.SetValue(DataKeyManager.PausedTask, currentTask);
 
@@ -264,13 +280,13 @@ namespace HelloWorldBot.Dialogs
             switch (await result)
             {
                 case "OK":                    
-                    BackgroundJob.Schedule(() => CreateCardReply(resume, string.Empty, message, options), TimeSpan.FromSeconds(5));
+                    BackgroundJob.Schedule(() => CreateCardReply(resume, string.Empty, message, options), TimeSpan.FromMinutes(5));
                     break;
                 case "Remind me in 10":
-                    BackgroundJob.Schedule(() => CreateCardReply(resume, string.Empty, message, options), TimeSpan.FromSeconds(5));
+                    BackgroundJob.Schedule(() => CreateCardReply(resume, string.Empty, message, options), TimeSpan.FromMinutes(10));
                     break;
                 case "Remind me in 15":
-                    BackgroundJob.Schedule(() => CreateCardReply(resume, string.Empty, message, options), TimeSpan.FromSeconds(5));
+                    BackgroundJob.Schedule(() => CreateCardReply(resume, string.Empty, message, options), TimeSpan.FromMinutes(15));
                     break;
             }
         }
@@ -306,6 +322,7 @@ namespace HelloWorldBot.Dialogs
 
             context.UserData.RemoveValue(DataKeyManager.PausedTask);
             context.UserData.SetValue(DataKeyManager.CurrentTask, pausedTask);
+            RegisterTrackTimeProcesses(context);
 
             await context.PostAsync($"{pausedTask.Description} has been resumed");
             context.Wait(MessageReceived);
@@ -349,8 +366,10 @@ namespace HelloWorldBot.Dialogs
 
             context.UserData.SetValue(DataKeyManager.LastStartTimer, DateTimeOffset.UtcNow);
             context.UserData.SetValue(DataKeyManager.CurrentTask, task);
+            RegisterTrackTimeProcesses(context);
 
             await context.PostAsync($"Timer has stared for: {task.Description}");
+
             context.Wait(MessageReceived);
         }
 
@@ -376,7 +395,6 @@ namespace HelloWorldBot.Dialogs
         }
 
         [LuisIntent("DeclineResume")]
-
         public async Task DeclineResume(IDialogContext context, LuisResult result)
         {
             TaskViewModel pausedTask;
@@ -386,6 +404,56 @@ namespace HelloWorldBot.Dialogs
                 await context.PostAsync($"So what are you working on?");                
             }            
             context.Wait(MessageReceived);
+        }
+
+        [LuisIntent("BreakIn5")]
+        public async Task BreakIn(IDialogContext context, LuisResult result)
+        {
+            TaskViewModel currentTask;
+            if (!context.UserData.TryGetValue(DataKeyManager.CurrentTask, out currentTask))
+            {
+                await context.PostAsync("You dont have active task to pause");
+                context.Wait(MessageReceived);
+                return;
+            }
+            var informDuartionStarTime = context.UserData.Get<DateTimeOffset>(DataKeyManager.InformDurationStartTime);
+            currentTask.TimeLogs.Add(new TimeLog
+            {
+                StartTime = informDuartionStarTime,
+                EndTime = DateTimeOffset.UtcNow
+            });
+            taskService.UpdateTask(currentTask);
+            context.UserData.RemoveValue(DataKeyManager.InformDurationStartTime);
+
+            context.UserData.RemoveValue(DataKeyManager.CurrentTask);
+            context.UserData.SetValue(DataKeyManager.PausedTask, currentTask);
+
+
+            var resume = new ResumptionCookie(context.Activity.AsMessageActivity());
+            var message = $"Let's go back to work on {currentTask.Description}";
+            var options = new Dictionary<string, string>
+                          {
+                              {"Yes resume", "Resume"},
+                              {"No I am working on something else", "DeclineResume"}
+                          };
+
+            await context.PostAsync("Go for a walk, get a glass of water. I'll remind you when 5mins is up");
+            BackgroundJob.Schedule(() => CreateCardReply(resume, string.Empty, message, options), TimeSpan.FromMinutes(5));
+        }
+
+        [LuisIntent("RemindBreakLater")]
+        public async Task DelayBreak(IDialogContext context, LuisResult result)
+        {
+            EntityRecommendation entityRecommendation;
+            if (result.TryFindEntity(LuisEntities.DelayBreakMinutes, out entityRecommendation))
+            {
+
+                var delayMinutes = int.Parse(entityRecommendation.Entity);
+                TaskViewModel currentTask = context.UserData.Get<TaskViewModel>(DataKeyManager.CurrentTask);
+                var resumptionCookie = new ResumptionCookie(context.Activity.AsMessageActivity());
+                BackgroundJob.Schedule(() => SuggestBreak(resumptionCookie, currentTask.Id), TimeSpan.FromMinutes(delayMinutes));
+                await context.PostAsync("Ok");
+            }
         }
 
         private async Task AfterOfferKnowAboutTags(IDialogContext context, IAwaitable<string> result)
@@ -417,8 +485,19 @@ namespace HelloWorldBot.Dialogs
             if (context.UserData.TryGetValue(DataKeyManager.CurrentTask, out currentTask))
             {
                 await context.PostAsync($"Timer has started for {currentTask.Description}");
+                RegisterTrackTimeProcesses(context);
             }
             context.Wait(MessageReceived);
+        }
+
+        private void RegisterTrackTimeProcesses(IDialogContext context)
+        {
+            TaskViewModel currentTask = context.UserData.Get<TaskViewModel>(DataKeyManager.CurrentTask);
+            context.UserData.SetValue(DataKeyManager.InformDurationStartTime, DateTimeOffset.UtcNow);
+
+            var resumptionCookie = new ResumptionCookie(context.Activity.AsMessageActivity());
+            BackgroundJob.Schedule(() => InformDuration(resumptionCookie, currentTask.Id), TimeSpan.FromMinutes(15));
+            BackgroundJob.Schedule(() => SuggestBreak(resumptionCookie, currentTask.Id), TimeSpan.FromMinutes(25));
         }
 
         private async Task AfterOfferSuggestFocusOnTask(IDialogContext context, IAwaitable<string> result)
@@ -436,6 +515,7 @@ namespace HelloWorldBot.Dialogs
                     }
                     context.UserData.SetValue(DataKeyManager.LastStartTimer, DateTimeOffset.UtcNow);
                     context.UserData.SetValue(DataKeyManager.CurrentTask, suggestTask);
+                    RegisterTrackTimeProcesses(context);
 
                     await context.PostAsync($"Timer has stared for: {suggestTask.Description}");
                     context.Wait(MessageReceived);
@@ -462,6 +542,7 @@ namespace HelloWorldBot.Dialogs
             var tasks = taskService.GetTasks(context.Activity.From.Id, taskDescription);
 
             context.UserData.SetValue(DataKeyManager.CurrentTask, tasks.First());
+            RegisterTrackTimeProcesses(context);
             await context.PostAsync($"Timer has started for {tasks.First().Description}");
             context.Wait(MessageReceived);
         }
@@ -722,12 +803,90 @@ namespace HelloWorldBot.Dialogs
                     context.UserData.RemoveValue(DataKeyManager.CurrentTask);
                     context.UserData.SetValue(DataKeyManager.PausedTask, currentTask);
                     await context.PostAsync($"{currentTask.Description} has been paused, you can type 'Resume timer' to continue your task");
+
+
+                    var informDuartionStarTime = context.UserData.Get<DateTimeOffset>(DataKeyManager.InformDurationStartTime);
+                    currentTask.TimeLogs.Add(new TimeLog
+                    {
+                        StartTime = informDuartionStarTime,
+                        EndTime = DateTimeOffset.UtcNow
+                    });
+                    taskService.UpdateTask(currentTask);
+                    context.UserData.RemoveValue(DataKeyManager.InformDurationStartTime);
+
                     context.Wait(MessageReceived);
                     break;
             }
         }
 
-        public void CreateReply(ResumptionCookie resume, string message)
+        public void InformDuration(ResumptionCookie resume, long needInformTaskId)
+        {
+            var restoreResume = RestoreResumptionCookie(resume);
+            var messageactivity = restoreResume.GetMessage();
+            
+            var stateClient = messageactivity.GetStateClient();
+
+            var userData = stateClient.BotState.GetUserData(restoreResume.Address.ChannelId, restoreResume.Address.UserId);
+
+            var currentTask = userData.GetProperty<TaskViewModel>(DataKeyManager.CurrentTask);
+            if (currentTask == null || currentTask.Id != needInformTaskId)
+            {
+                return;
+            }
+
+            var informDuartionStarTime = userData.GetProperty<DateTimeOffset>(DataKeyManager.InformDurationStartTime);
+
+            var beingTrackedFocusTime = (DateTimeOffset.UtcNow - informDuartionStarTime).TotalMinutes;
+            if (informDuartionStarTime == new DateTimeOffset() || beingTrackedFocusTime < 15)
+            {
+                return;
+            }
+
+            BackgroundJob.Schedule(() => InformDuration(resume, needInformTaskId), TimeSpan.FromMinutes(15));
+
+            var task = taskService.GetTask(needInformTaskId);
+            var logedFocusTime = task.TimeLogs.Sum(i => (i.EndTime - i.StartTime).TotalMinutes);
+
+            var reply = messageactivity.CreateReply();
+            reply.Text = $"Awesome! You have been focused on {task.Description}, for {logedFocusTime + beingTrackedFocusTime} minutes";
+
+            var client = new ConnectorClient(new Uri(messageactivity.ServiceUrl));
+            client.Conversations.ReplyToActivity(reply);
+        }
+
+        public void SuggestBreak(ResumptionCookie resume, long needInformTaskId)
+        {
+            var restoreResume = RestoreResumptionCookie(resume);
+            var messageactivity = restoreResume.GetMessage();
+
+            var stateClient = messageactivity.GetStateClient();
+
+            var userData = stateClient.BotState.GetUserData(restoreResume.Address.ChannelId, restoreResume.Address.UserId);
+
+            var currentTask = userData.GetProperty<TaskViewModel>(DataKeyManager.CurrentTask);
+            if (currentTask == null || currentTask.Id != needInformTaskId)
+            {
+                return;
+            }
+
+            var informDuartionStarTime = userData.GetProperty<DateTimeOffset>(DataKeyManager.InformDurationStartTime);
+
+            var beingTrackedFocusTime = (DateTimeOffset.UtcNow - informDuartionStarTime).TotalMinutes;
+            if (informDuartionStarTime == new DateTimeOffset() || beingTrackedFocusTime < 25)
+            {
+                return;
+            }
+            var options = new Dictionary<string, string>
+                          {
+                              {"Ok I will", "BreakIn 5"  },
+                              {"Remind me in 5", "RemindBreakLater 5" },
+                              { "Remind me in 10", "RemindBreakLater 10"},
+                              { "Remind me in 15", "RemindBreakLater 15"},
+                          };
+            CreateCardReply(resume, string.Empty, "To help your focus, take a break for 5mins now", options);
+        }
+
+        public ResumptionCookie RestoreResumptionCookie(ResumptionCookie resume)
         {
             var data = JsonConvert.SerializeObject(resume);
 
@@ -741,34 +900,24 @@ namespace HelloWorldBot.Dialogs
             bool isGroup = resumeData.isGroup;
 
             var restoreResume = new ResumptionCookie(new Address(botId, channelId, userId, conversationId, serviceUrl), userName, isGroup, "en_GB");
+            return restoreResume;
+        }
 
+        public void CreateReply(ResumptionCookie resume, string message)
+        {
+            var restoreResume = RestoreResumptionCookie(resume);
             var messageactivity = restoreResume.GetMessage();
             var reply = messageactivity.CreateReply();
 
             reply.Text = message;
 
             var client = new ConnectorClient(new Uri(messageactivity.ServiceUrl));
+
             client.Conversations.ReplyToActivity(reply);
         }
 
-        public void CreateCardReply(ResumptionCookie resume, string title, string text, Dictionary<string,string> options)
+        public void CreateCardReply(ResumptionCookie resume, string title, string text, Dictionary<string, string> options)
         {
-            var data = JsonConvert.SerializeObject(resume);
-
-            dynamic resumeData = JsonConvert.DeserializeObject(data);
-            string botId = resumeData.address.botId;
-            string channelId = resumeData.address.channelId;
-            string userId = resumeData.address.userId;
-            string conversationId = resumeData.address.conversationId;
-            string serviceUrl = resumeData.address.serviceUrl;
-            string userName = resumeData.userName;
-            bool isGroup = resumeData.isGroup;
-
-            var restoreResume = new ResumptionCookie(new Address(botId, channelId, userId, conversationId, serviceUrl), userName, isGroup, "en_GB");
-
-            var messageactivity = restoreResume.GetMessage();
-            var reply = messageactivity.CreateReply();
-
             var buttons = options.Select(i => new CardAction
                                               {
                                                   Type = ActionTypes.PostBack,
@@ -783,8 +932,13 @@ namespace HelloWorldBot.Dialogs
                 Text = text,
                 Buttons = buttons
             };
-            reply.Attachments = new List<Attachment> { card.ToAttachment() };
 
+
+            var restoreResume = RestoreResumptionCookie(resume);
+            var messageactivity = restoreResume.GetMessage();            
+
+            var reply = messageactivity.CreateReply();
+            reply.Attachments = new List<Attachment> { card.ToAttachment() };
 
             var client = new ConnectorClient(new Uri(messageactivity.ServiceUrl));
             client.Conversations.ReplyToActivity(reply);
