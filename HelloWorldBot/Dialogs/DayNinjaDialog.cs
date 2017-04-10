@@ -848,7 +848,7 @@ namespace HelloWorldBot.Dialogs
             var logedFocusTime = task.TimeLogs.Sum(i => (i.EndTime - i.StartTime).TotalMinutes);
 
             var reply = messageactivity.CreateReply();
-            reply.Text = $"Awesome! You have been focused on {task.Description}, for {logedFocusTime + beingTrackedFocusTime} minutes";
+            reply.Text = $"Awesome! You have been focused on {task.Description}, for {int.Parse((logedFocusTime + beingTrackedFocusTime).ToString())} minutes";
 
             var client = new ConnectorClient(new Uri(messageactivity.ServiceUrl));
             client.Conversations.ReplyToActivity(reply);
