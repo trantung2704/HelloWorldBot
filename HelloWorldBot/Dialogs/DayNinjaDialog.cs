@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.Data.SqlTypes;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Net.Http;
+using System.Reflection.Emit;
+using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
@@ -13,6 +16,7 @@ using DayNinjaBot.Business;
 using DayNinjaBot.Business.Services;
 using DayNinjaBot.Business.ViewModels;
 using Hangfire;
+using HelloWorldBot.Models;
 using HelloWorldBot.Queries;
 using Microsoft.Bot.Builder.Dialogs;
 using Microsoft.Bot.Builder.FormFlow;
@@ -26,7 +30,7 @@ using PayNinja.Business.ViewModels;
 namespace HelloWorldBot.Dialogs
 {
     [Serializable]
-    [LuisModel("21d7c272-725e-4794-90c7-f17fef5e7e78", "c58b634a1b0d4a709f783d6e9e6a15f0")]
+    [LuisModel("ba898e9f-0981-4273-9530-d0d27b5f1c17", "a5f4459c9dee4f65a535203c555f9531")]
     public class DayNinjaDialog : LuisDialog<object>
     {
         private  readonly TaskService taskService = new TaskService();
@@ -42,6 +46,12 @@ namespace HelloWorldBot.Dialogs
         [LuisIntent("Greeting")]
         public async Task Greeting(IDialogContext context, LuisResult result) 
         {
+            var profileUrl = await GetProfileUrl(context.Activity.From.Id);
+            if (profileUrl != string.Empty)
+            {
+                await context.PostAsync($"your are: {profileUrl}");
+            }
+
             DateTimeOffset lastUpdate;
 
             var canGetLastUpdate = context.UserData.TryGetValue(DataKeyManager.LastUpdate, out lastUpdate);
@@ -50,7 +60,7 @@ namespace HelloWorldBot.Dialogs
             {
                 await context.PostAsync("Hey Ninja!  Ready to be productive today? ");
                 context.UserData.SetValue(DataKeyManager.LastUpdate, DateTimeOffset.UtcNow);
-            }
+            }            
 
             TaskViewModel currentTask;
             if (context.UserData.TryGetValue(DataKeyManager.CurrentTask, out currentTask))
@@ -821,6 +831,10 @@ namespace HelloWorldBot.Dialogs
 
         public void InformDuration(ResumptionCookie resume, long needInformTaskId)
         {
+            if (resume == null)
+            {
+                throw new ArgumentNullException(nameof(resume));
+            }
             var restoreResume = RestoreResumptionCookie(resume);
             var messageactivity = restoreResume.GetMessage();
             
@@ -943,5 +957,42 @@ namespace HelloWorldBot.Dialogs
             var client = new ConnectorClient(new Uri(messageactivity.ServiceUrl));
             client.Conversations.ReplyToActivity(reply);
         }
+
+        private async Task<string> GetProfileUrl(string userId)
+        {
+            try
+            {
+                var httpClient = new HttpClient();
+
+                var url = $"https://graph.facebook.com/v2.6/{userId}?fields=first_name,last_name,profile_pic,locale,timezone,gender&access_token={ConfigurationReader.AppAccessToken}";
+                var responseString = await httpClient.GetStringAsync(url);
+                var profile = JsonConvert.DeserializeObject<FacebookUserProfile>(responseString);
+
+                var profilePicture = profile.ProfilePicture.Split(new[] { ".jpg" }, StringSplitOptions.None)
+                                            .First()
+                                            .Split('/')
+                                            .Last();
+
+                return $"{profilePicture}.jpg";
+
+            }
+            catch (Exception)
+            {
+                return string.Empty;
+            }
+        }
+
+    }
+
+    internal class FacebookUserProfile
+    {
+        [JsonProperty("first_name")]
+        public string Firstname { get; set; }
+
+        [JsonProperty("last_name")]
+        public string LastName { get; set; }
+
+        [JsonProperty("profile_pic")]
+        public string ProfilePicture { get; set; }
     }
 }
