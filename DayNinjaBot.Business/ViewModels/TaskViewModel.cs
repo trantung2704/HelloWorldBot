@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
+using DayNinjaBot.Data.Entites;
 
 namespace PayNinja.Business.ViewModels
 {
@@ -37,6 +39,37 @@ namespace PayNinja.Business.ViewModels
 
     public class TaskViewModel
     {
+        public TaskViewModel()
+        {
+        }
+
+        public TaskViewModel(Task task)
+        {
+            Id = task.Id;
+            AddedByUserId = task.AddedByUserId;
+            Created = DateTimeOffset.UtcNow;
+            DayMoveCount = task.DayMoveCount;
+            Description = task.Description;
+            Done = task.Done;
+            ForDate = task.ForDate;
+            ForUserId = task.ForUserId;
+            HourlyRate = task.HourlyRate;
+            JobId = task.JobId;
+            PosNo = task.PosNo;
+            PrivateNote = task.PrivateNote;
+            PublicNote = task.PublicNote;
+            RestMins = task.RestMins;
+            SplitOfTaskId = task.SplitOfTaskId;
+            UnitMins = task.UnitMins;
+            UnitsAct = task.UnitsAct;
+            UnitsEst = task.UnitsEst;
+            Updated = task.Updated;
+            Tags = task.Tags ?? new List<string>();
+            UserId = task.UserId;
+            TotalTime = task.TotalTime;
+            TimeLogs = task.TimeLogs.Select(i=> new TimeLogViewModel(i)).ToList();
+
+        }
         //public TaskViewModel()
         //{
         //    Intervals = new List<TaskIntervalViewModel>();
@@ -69,11 +102,22 @@ namespace PayNinja.Business.ViewModels
 
         public string UserId { get; set; }
 
-        public List<TimeLog> TimeLogs { get; set; }
+        public List<TimeLogViewModel> TimeLogs { get; set; }
     }
 
-    public class TimeLog
+    public class TimeLogViewModel
     {
+        public TimeLogViewModel()
+        {
+            
+        }
+
+        public TimeLogViewModel(TimeLog timeLog)
+        {
+            StartTime = timeLog.StartTime;
+            EndTime = timeLog.EndTime;
+        }
+
         public DateTimeOffset StartTime { get; set; }
 
         public DateTimeOffset EndTime { get; set; }

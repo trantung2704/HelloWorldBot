@@ -4,11 +4,11 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{723B8CF1-A4D4-438A-8B9E-138DD8C9CD85}</ProjectGuid>
+    <ProjectGuid>{E06AAE82-1CF1-44FE-8AE5-0CF25879D255}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>DayNinjaBot.Business</RootNamespace>
-    <AssemblyName>DayNinjaBot.Business</AssemblyName>
+    <RootNamespace>DayNinjaBot.Data</RootNamespace>
+    <AssemblyName>DayNinjaBot.Data</AssemblyName>
     <TargetFrameworkVersion>v4.6</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />
@@ -65,6 +65,7 @@
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.ComponentModel.DataAnnotations" />
+    <Reference Include="System.Configuration" />
     <Reference Include="System.Core" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
@@ -74,24 +75,24 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="LuisEntites.cs" />
-    <Compile Include="DataKeyManager.cs" />
-    <Compile Include="DbContext.cs" />
+    <Compile Include="Entites\Task.cs" />
+    <Compile Include="Entites\TimeLog.cs" />
+    <Compile Include="Migrations\201704110735450_init.cs" />
+    <Compile Include="Migrations\201704110735450_init.Designer.cs">
+      <DependentUpon>201704110735450_init.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\Configuration.cs" />
+    <Compile Include="PayNinjaDb.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Services\ITaskService.cs" />
-    <Compile Include="Services\TaskService.cs" />
-    <Compile Include="ViewModels\InformDuration.cs" />
-    <Compile Include="ViewModels\TaskViewModel.cs" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\DayNinjaBot.Data\DayNinjaBot.Data.csproj">
-      <Project>{e06aae82-1cf1-44fe-8ae5-0cf25879d255}</Project>
-      <Name>DayNinjaBot.Data</Name>
-    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
     <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Migrations\201704110735450_init.resx">
+      <DependentUpon>201704110735450_init.cs</DependentUpon>
+    </EmbeddedResource>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

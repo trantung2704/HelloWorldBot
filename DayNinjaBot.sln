@@ -6,6 +6,11 @@ MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DayNinjaBot", "HelloWorldBot\DayNinjaBot.csproj", "{A8BA1066-5695-4D71-ABB4-65E5A5E0C3D4}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DayNinjaBot.Business", "DayNinjaBot.Business\DayNinjaBot.Business.csproj", "{723B8CF1-A4D4-438A-8B9E-138DD8C9CD85}"
+	ProjectSection(ProjectDependencies) = postProject
+		{E06AAE82-1CF1-44FE-8AE5-0CF25879D255} = {E06AAE82-1CF1-44FE-8AE5-0CF25879D255}
+	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DayNinjaBot.Data", "DayNinjaBot.Data\DayNinjaBot.Data.csproj", "{E06AAE82-1CF1-44FE-8AE5-0CF25879D255}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,6 +26,10 @@ Global
 		{723B8CF1-A4D4-438A-8B9E-138DD8C9CD85}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{723B8CF1-A4D4-438A-8B9E-138DD8C9CD85}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{723B8CF1-A4D4-438A-8B9E-138DD8C9CD85}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E06AAE82-1CF1-44FE-8AE5-0CF25879D255}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E06AAE82-1CF1-44FE-8AE5-0CF25879D255}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E06AAE82-1CF1-44FE-8AE5-0CF25879D255}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E06AAE82-1CF1-44FE-8AE5-0CF25879D255}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

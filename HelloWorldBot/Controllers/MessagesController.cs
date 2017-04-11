@@ -6,8 +6,13 @@ using System.Security.Policy;
 using System.Text;
 using System.Threading.Tasks;
 using System.Web.Http;
+using Autofac;
+using DayNinjaBot.Business.Services;
+using DayNinjaBot.Data;
 using HelloWorldBot.Dialogs;
 using Microsoft.Bot.Builder.Dialogs;
+using Microsoft.Bot.Builder.Dialogs.Internals;
+using Microsoft.Bot.Builder.Internals.Fibers;
 using Microsoft.Bot.Connector;
 
 namespace HelloWorldBot.Controllers
@@ -19,7 +24,10 @@ namespace HelloWorldBot.Controllers
         {
             if (activity.Type == ActivityTypes.Message)
             {
-                await Conversation.SendAsync(activity, () => new DayNinjaDialog());
+                using (var scope = DialogModule.BeginLifetimeScope(Conversation.Container, activity))
+                {
+                    await Conversation.SendAsync(activity, () => scope.Resolve<IDialog<object>>());
+                }
             }
             else
             {
@@ -36,7 +44,10 @@ namespace HelloWorldBot.Controllers
             {
                 activity.Type = ActivityTypes.Message;
                 activity.Text = "Delete User Data";
-                await Conversation.SendAsync(activity, () => new DayNinjaDialog());
+                using (var scope = DialogModule.BeginLifetimeScope(Conversation.Container, activity))
+                {
+                    await Conversation.SendAsync(activity, () => scope.Resolve<IDialog<object>>());
+                }
             }
             else if (activity.Type == ActivityTypes.ConversationUpdate)
             {
@@ -44,7 +55,10 @@ namespace HelloWorldBot.Controllers
                 {
                     activity.Type = ActivityTypes.Message;
                     activity.Text = "Conversation Update";
-                    await Conversation.SendAsync(activity, () => new DayNinjaDialog());
+                    using (var scope = DialogModule.BeginLifetimeScope(Conversation.Container, activity))
+                    {
+                        await Conversation.SendAsync(activity, () => scope.Resolve<IDialog<object>>());
+                    }                    
                 }
             }
             else if (activity.Type == ActivityTypes.ContactRelationUpdate)
@@ -53,7 +67,10 @@ namespace HelloWorldBot.Controllers
                 {
                     activity.Type = ActivityTypes.Message;
                     activity.Text = "Conversation Update";
-                    await Conversation.SendAsync(activity, () => new DayNinjaDialog());
+                    using (var scope = DialogModule.BeginLifetimeScope(Conversation.Container, activity))
+                    {
+                        await Conversation.SendAsync(activity, () => scope.Resolve<IDialog<object>>());
+                    }
                 }
             }
             else if (activity.Type == ActivityTypes.Typing)
@@ -65,7 +82,10 @@ namespace HelloWorldBot.Controllers
                 {
                     activity.Type = ActivityTypes.Message;
                     activity.Text = "Conversation Update";
-                    await Conversation.SendAsync(activity, () => new DayNinjaDialog());
+                    using (var scope = DialogModule.BeginLifetimeScope(Conversation.Container, activity))
+                    {
+                        await Conversation.SendAsync(activity, () => scope.Resolve<IDialog<object>>());
+                    }
                 }
             }
 

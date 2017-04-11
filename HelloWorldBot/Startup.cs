@@ -1,6 +1,4 @@
-﻿using System;
-using System.Threading.Tasks;
-using Hangfire;
+﻿using Hangfire;
 using Hangfire.Storage;
 using Microsoft.Owin;
 using Owin;
@@ -17,7 +15,7 @@ namespace HelloWorldBot
         }
         private void ConfigureHangFire(IAppBuilder app)
         {
-            Hangfire.GlobalConfiguration.Configuration.UseSqlServerStorage("HangFireConnection");
+            GlobalConfiguration.Configuration.UseSqlServerStorage("HangFireConnection");
             app.UseHangfireServer();
             app.UseHangfireDashboard();
             using (var connection = JobStorage.Current.GetConnection())
