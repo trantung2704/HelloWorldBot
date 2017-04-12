@@ -85,7 +85,9 @@ namespace DayNinjaBot.Business.Services
 
         public TaskViewModel GetTask(long id)
         {
-            return new TaskViewModel(db.Tasks.Find(id));
+            var task = db.Tasks.Find(id);
+            task.TimeLogs = db.TimeLogs.Where(i=>i.TaskId == task.Id).ToList();
+            return new TaskViewModel(task);
         }
 
         public void RemoveTask(long id)

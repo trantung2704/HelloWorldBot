@@ -10,6 +10,7 @@ using Autofac;
 using DayNinjaBot.Business.Services;
 using DayNinjaBot.Data;
 using HelloWorldBot.Dialogs;
+using HelloWorldBot.Models;
 using Microsoft.Bot.Builder.Dialogs;
 using Microsoft.Bot.Builder.Dialogs.Internals;
 using Microsoft.Bot.Builder.Internals.Fibers;
@@ -17,7 +18,7 @@ using Microsoft.Bot.Connector;
 
 namespace HelloWorldBot.Controllers
 {
-    [BotAuthentication]
+    [BotAuthentication(CredentialProviderType = typeof(MultiCredentialProvider))]
     public class MessagesController : ApiController
     {
         public async Task<HttpResponseMessage> Post([FromBody]Activity activity)

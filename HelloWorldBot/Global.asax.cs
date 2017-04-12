@@ -1,10 +1,12 @@
-﻿using System.Web.Http;
+﻿using System.Security.Claims;
+using System.Web.Http;
 using Autofac;
 using DayNinjaBot.Business.Services;
 using DayNinjaBot.Data;
 using HelloWorldBot.Dialogs;
 using Microsoft.Bot.Builder.Dialogs;
 using Microsoft.Bot.Builder.Internals.Fibers;
+using Microsoft.Bot.Connector;
 
 namespace HelloWorldBot
 {
@@ -26,7 +28,7 @@ namespace HelloWorldBot
                    .Keyed<ITaskService>(FiberModule.Key_DoNotSerialize)
                    .AsImplementedInterfaces()
                    .SingleInstance();
-            
+
             builder.Update(Conversation.Container);
             GlobalConfiguration.Configure(WebApiConfig.Register);
         }

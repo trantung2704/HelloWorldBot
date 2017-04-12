@@ -2,7 +2,9 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Runtime.Serialization;
+using System.Threading;
 using System.Threading.Tasks;
 using Autofac;
 using Autofac.Core;
@@ -20,6 +22,7 @@ using Microsoft.Bot.Builder.Internals.Fibers;
 using Microsoft.Bot.Builder.Luis;
 using Microsoft.Bot.Builder.Luis.Models;
 using Microsoft.Bot.Connector;
+using Microsoft.Rest.Serialization;
 using Newtonsoft.Json;
 using PayNinja.Business.ViewModels;
 
@@ -486,6 +489,26 @@ namespace HelloWorldBot.Dialogs
             }
         }
 
+        [LuisIntent("InformDuration")]
+        public async Task InformDuration(IDialogContext context, LuisResult result)
+        {
+            await context.PostAsync("Inform Duration");
+            var userData = context.UserData;
+
+            var currentTask = userData.Get<TaskViewModel>(DataKeyManager.CurrentTask);
+            var task = taskService.GetTask(currentTask.Id);
+            if (task == null)
+            {
+                return;
+            }
+            var informDuartionStarTime = userData.Get<DateTimeOffset>(DataKeyManager.InformDurationStartTime);
+            var logedFocusTime = task.TimeLogs.Sum(i => (i.EndTime - i.StartTime).TotalSeconds);
+            var beingTrackedFocusTime = (DateTimeOffset.UtcNow - informDuartionStarTime).TotalSeconds;
+
+            await context.PostAsync($"{Math.Round(logedFocusTime + beingTrackedFocusTime)} seconds");
+            context.Wait(MessageReceived);
+        }
+
         public void InformDuration(ResumptionCookie resume, long needInformTaskId, int fail = 0)
         {
             try
@@ -495,43 +518,51 @@ namespace HelloWorldBot.Dialogs
                     throw new ArgumentNullException(nameof(resume));
                 }
                 var restoreResume = RestoreResumptionCookie(resume);
-                var messageactivity = restoreResume.GetMessage();
+                var messageActivity = restoreResume.GetMessage();
 
-                var stateClient = messageactivity.GetStateClient();
+                //var stateClient = messageActivity.GetStateClient();             
 
-                var userData = stateClient.BotState.GetUserData(restoreResume.Address.ChannelId, restoreResume.Address.UserId);
+                //var userData = stateClient.BotState.GetUserData(restoreResume.Address.ChannelId, restoreResume.Address.UserId);
 
-                var currentTask = userData.GetProperty<TaskViewModel>(DataKeyManager.CurrentTask);
-                if (currentTask == null || currentTask.Id != needInformTaskId)
+                //var currentTask = userData.GetProperty<TaskViewModel>(DataKeyManager.CurrentTask);
+                //if (currentTask == null || currentTask.Id != needInformTaskId)
+                //{
+                //    return;
+                //}
+
+                //var informDuartionStarTime = userData.GetProperty<DateTimeOffset>(DataKeyManager.InformDurationStartTime);
+
+                //if (informDuartionStarTime == new DateTimeOffset())
+                //{
+                //    return;
+                //}
+
+                //var task = taskService.GetTask(needInformTaskId);
+                //if (task == null)
+                //{
+                //    return;
+                //}
+
+                //var logedFocusTime = task.TimeLogs.Sum(i => (i.EndTime - i.StartTime).TotalSeconds);
+
+                ////var reply = messageactivity.CreateReply();                
+                //var beingTrackedFocusTime = (DateTimeOffset.UtcNow - informDuartionStarTime).TotalSeconds;                
+                messageActivity.Text = $"Inform duration";
+                messageActivity.Type = ActivityTypes.Message;
+
+                using (var client = new HttpClient())
                 {
-                    return;
-                }
+                    client.BaseAddress = new Uri("https://dayninjabot.azurewebsites.net");
+                    client.DefaultRequestHeaders.Accept.Clear();
+                    client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
-                var informDuartionStarTime = userData.GetProperty<DateTimeOffset>(DataKeyManager.InformDurationStartTime);
+                    var token = GetAuthToken("f0182014-41fd-4465-8d1b-901c640955a0", "pcofL2H9oZXbhr97oZyadfr");
+                    client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-                if (informDuartionStarTime == new DateTimeOffset())
-                {
-                    return;
-                }
+                    var result = client.PostAsJsonAsync("/api/messages", messageActivity).Result;
+                 }
 
-                var task = taskService.GetTask(needInformTaskId);
-                if (task == null)
-                {
-                    return;
-                }
-
-                var logedFocusTime = task.TimeLogs.Sum(i => (i.EndTime - i.StartTime).TotalMinutes);
-
-                var reply = messageactivity.CreateReply();
-
-                var beingTrackedFocusTime = (DateTimeOffset.UtcNow - informDuartionStarTime).TotalMinutes;
-                reply.Text = $"Awesome! You have been focused on {task.Description}, for {Math.Round(logedFocusTime + beingTrackedFocusTime, 0)} minutes.";
-
-                var client = new ConnectorClient(new Uri(messageactivity.ServiceUrl));
-
-                client.Conversations.ReplyToActivity(reply);
-
-                BackgroundJob.Schedule(() => InformDuration(resume, needInformTaskId, 0), TimeSpan.FromSeconds(15));
+                BackgroundJob.Schedule(() => InformDuration(resume, needInformTaskId, 0), TimeSpan.FromSeconds(15));                
             }
             catch (Exception)
             {
@@ -1018,6 +1049,34 @@ namespace HelloWorldBot.Dialogs
             }
         }
 
+        public string GetAuthToken(string appId, string appKey)
+        {
+            using (var client = new HttpClient())
+            {
+                client.BaseAddress = new Uri("https://login.microsoftonline.com"); //This is important
+                client.DefaultRequestHeaders.Accept.Clear();
+                client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+                var values = new List<KeyValuePair<string, string>>();
+
+                values.Add(new KeyValuePair<string, string>("grant_type", "client_credentials"));
+                values.Add(new KeyValuePair<string, string>("client_id", appId));
+                values.Add(new KeyValuePair<string, string>("client_secret", appKey));
+                values.Add(new KeyValuePair<string, string>("scope", "https://graph.microsoft.com/.default")); // This is important
+
+                using (var content = new FormUrlEncodedContent(values))
+                {
+                    var response = client.PostAsync("/common/oauth2/v2.0/token", content).Result;
+                    response.EnsureSuccessStatusCode();
+
+                    var stringResponse = response.Content.ReadAsStringAsync().Result;
+                    dynamic responseObject = JsonConvert.DeserializeObject(stringResponse);
+
+                    return responseObject.access_token;
+                }
+            }
+        }
+
     }
 
     internal class FacebookUserProfile
@@ -1030,5 +1089,14 @@ namespace HelloWorldBot.Dialogs
 
         [JsonProperty("profile_pic")]
         public string ProfilePicture { get; set; }
+    }
+
+    public class CustomMicrosoftAppCredentials : MicrosoftAppCredentials
+    {
+        public CustomMicrosoftAppCredentials(string appId, string appPassword) : base(appId, appPassword)
+        {
+        }
+
+        public override string OAuthScope => "https://api.botframework.com/.default";
     }
 }
