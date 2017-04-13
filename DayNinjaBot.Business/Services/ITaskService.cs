@@ -6,7 +6,7 @@ namespace DayNinjaBot.Business.Services
     public interface ITaskService
     {
         void AddTimeLog(TimeLogViewModel timeLogViewModel, long taskId);
-        int CreateNewTask(TaskViewModel task);
+        int CreateTask(TaskViewModel task);
         TaskViewModel GetFirstTask(string userId);
         TaskViewModel GetTask(long id);
         int GetTaskCount(string userId);

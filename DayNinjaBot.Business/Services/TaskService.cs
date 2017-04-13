@@ -17,7 +17,7 @@ namespace DayNinjaBot.Business.Services
             this.db = db;
         }
 
-        public int CreateNewTask(TaskViewModel task)
+        public int CreateTask(TaskViewModel task)
         {
             var newTask = new Task
                           {
@@ -86,6 +86,10 @@ namespace DayNinjaBot.Business.Services
         public TaskViewModel GetTask(long id)
         {
             var task = db.Tasks.Find(id);
+            if (task == null)
+            {
+                return null;
+            }
             task.TimeLogs = db.TimeLogs.Where(i=>i.TaskId == task.Id).ToList();
             return new TaskViewModel(task);
         }

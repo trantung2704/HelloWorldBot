@@ -5,5 +5,7 @@
         public static string TaskTitle => "TaskTitle";
 
         public static string DelayBreakMinutes => "DelayBreakMinutes";
+
+        public static string TaskId => "TaskId";
     }
 }

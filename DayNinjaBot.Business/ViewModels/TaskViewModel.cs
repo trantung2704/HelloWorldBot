@@ -67,7 +67,7 @@ namespace PayNinja.Business.ViewModels
             Tags = task.Tags ?? new List<string>();
             UserId = task.UserId;
             TotalTime = task.TotalTime;
-            TimeLogs = task.TimeLogs.Select(i=> new TimeLogViewModel(i)).ToList();
+            TimeLogs = task.TimeLogs?.Select(i=> new TimeLogViewModel(i)).ToList() ?? new List<TimeLogViewModel>();
 
         }
         //public TaskViewModel()
