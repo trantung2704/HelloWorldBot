@@ -31,7 +31,7 @@ using PayNinja.Business.ViewModels;
 namespace HelloWorldBot.Dialogs
 {
     [Serializable]
-    [LuisModel("ba898e9f-0981-4273-9530-d0d27b5f1c17", "a5f4459c9dee4f65a535203c555f9531")]
+    [LuisModel("3ed9b105-68ec-4c7f-a6ff-671d3f2d9904", "99fb37074a464135a1aacc3e938c4dd3")]
     public class DayNinjaDialog : LuisDialog<object>
     {
         private readonly ITaskService taskService;
