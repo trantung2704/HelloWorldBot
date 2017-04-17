@@ -16,7 +16,6 @@ namespace DayNinjaBot.Data.Entites
         public string Description { get; set; }
         public string PublicNote { get; set; }
         public string PrivateNote { get; set; }
-        public DateTimeOffset? Created { get; set; }
         public DateTimeOffset? ForDate { get; set; }
         public int? PosNo { get; set; }
         public int UnitMins { get; set; }

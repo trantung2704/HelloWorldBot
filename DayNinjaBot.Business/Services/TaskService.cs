@@ -22,7 +22,6 @@ namespace DayNinjaBot.Business.Services
             var newTask = new Task
                           {
                               AddedByUserId = task.AddedByUserId,
-                              Created = DateTimeOffset.UtcNow,
                               DayMoveCount = task.DayMoveCount,
                               Description = task.Description,
                               Done = task.Done,
@@ -99,7 +98,7 @@ namespace DayNinjaBot.Business.Services
             var removedTask = db.Tasks.Find(id);
             if (removedTask != null)
             {
-
+                db.Tasks.Remove(removedTask);
             }            
             db.SaveChanges();
         }
@@ -108,7 +107,6 @@ namespace DayNinjaBot.Business.Services
         {
            var entity = db.Tasks.First(i => i.Id == task.Id);
            entity.AddedByUserId = task.AddedByUserId;
-           entity.Created = DateTimeOffset.UtcNow;
            entity.DayMoveCount = task.DayMoveCount;
            entity.Description = task.Description;
            entity.Done = task.Done;

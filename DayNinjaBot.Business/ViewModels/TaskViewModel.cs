@@ -47,7 +47,6 @@ namespace PayNinja.Business.ViewModels
         {
             Id = task.Id;
             AddedByUserId = task.AddedByUserId;
-            Created = DateTimeOffset.UtcNow;
             DayMoveCount = task.DayMoveCount;
             Description = task.Description;
             Done = task.Done;

@@ -19,5 +19,7 @@
         public static string SuggestFocusTask => "SuggestFocusTask";
 
         public static string InformDurationStartTime => "InformDuartion";
+
+        public static string Timezone => "Timezone";
     }
 }

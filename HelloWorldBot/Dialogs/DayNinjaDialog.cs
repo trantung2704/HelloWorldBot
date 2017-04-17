@@ -70,15 +70,15 @@ namespace HelloWorldBot.Dialogs
         }
 
         [LuisIntent("Greeting")]
-        public async Task Greeting(IDialogContext context, LuisResult result) 
+        public async Task Greeting(IDialogContext context, LuisResult result)
         {
             DateTimeOffset lastUpdate;
             var canGetLastUpdate = context.UserData.TryGetValue(DataKeyManager.LastUpdate, out lastUpdate);
 
-            if (!canGetLastUpdate || lastUpdate.Date != DateTimeOffset.UtcNow.Date)
-            {
+            if (!canGetLastUpdate || lastUpdate.Date !=  await DateTimeOffsetNow(context))
+            {                
                 await context.PostAsync("Hey Ninja!  Ready to be productive today? ");                
-                context.UserData.SetValue(DataKeyManager.LastUpdate, DateTimeOffset.UtcNow);
+                context.UserData.SetValue(DataKeyManager.LastUpdate, await DateTimeOffsetNow(context));
             }            
 
             TaskViewModel currentTask;
@@ -200,7 +200,7 @@ namespace HelloWorldBot.Dialogs
                 }
 
                 context.UserData.SetValue(DataKeyManager.CurrentTask, task);                
-                StartTrackTimeProcesses(context);
+                await StartTrackTimeProcesses(context);
 
                 await context.PostAsync($"Timer start for {task.Description}");
                 context.Wait(MessageReceived);
@@ -309,13 +309,19 @@ namespace HelloWorldBot.Dialogs
                 context.Wait(MessageReceived);
                 return;
             }
+            var clientTime = (await DateTimeOffsetNow(context));
 
             context.UserData.RemoveValue(DataKeyManager.PausedTask);
             context.UserData.SetValue(DataKeyManager.CurrentTask, pausedTask);
-            context.UserData.SetValue(DataKeyManager.InformDurationStartTime, DateTimeOffset.UtcNow);
-            StartTrackTimeProcesses(context);
+            context.UserData.SetValue(DataKeyManager.InformDurationStartTime, clientTime);
+            await StartTrackTimeProcesses(context);
+                        
+            var task = taskService.GetTask(pausedTask.Id);            
 
-            await context.PostAsync($"{pausedTask.Description} has been resumed");
+            var loggedTime = task.TimeLogs.Where(i => i.StartTime.Date == clientTime.Date
+                                                      && i.EndTime.Date == clientTime.Date)
+                                 .Sum(i => (i.EndTime - i.StartTime).TotalMinutes);
+            await context.PostAsync($"You have resumed {task.Description}. You have been working on this task for {Math.Round(loggedTime)}mins today.");
             context.Wait(MessageReceived);
         }
 
@@ -357,13 +363,13 @@ namespace HelloWorldBot.Dialogs
 
             DateTimeOffset lastStartTimer;
             var canGetLastStartTimer = context.UserData.TryGetValue(DataKeyManager.InformDurationStartTime, out lastStartTimer);
-            if (canGetLastStartTimer && lastStartTimer.Date != DateTimeOffset.Now.Date)
+            if (canGetLastStartTimer && lastStartTimer.Date != (await DateTimeOffsetNow(context)).Date)
             {
                 await context.PostAsync("Remember you can tell me to switch or pause at any time, but it is best to remain focused on this single task!  ... so I'll shut up now until time is up.");                
             }
 
             context.UserData.SetValue(DataKeyManager.CurrentTask, task);
-            StartTrackTimeProcesses(context);
+            await StartTrackTimeProcesses(context);
 
             await context.PostAsync($"Timer has stared for: {task.Description}");
 
@@ -421,10 +427,9 @@ namespace HelloWorldBot.Dialogs
             }
 
             var task = taskService.GetTask(needInformTaskId);
-            var logedFocusTime = task.TimeLogs.Sum(i => (i.EndTime - i.StartTime).TotalSeconds);
-            var beingTrackedFocusTime = (DateTimeOffset.UtcNow - informDuartionStarTime).TotalSeconds;
+            var beingTrackedFocusTime = (DateTimeOffset.UtcNow - informDuartionStarTime).TotalMinutes;
 
-            await context.PostAsync($"Awesome! You have been focused on {task.Description} for {Math.Round(logedFocusTime + beingTrackedFocusTime)}mins");
+            await context.PostAsync($"Awesome! You have been focused on {task.Description} for {Math.Round(beingTrackedFocusTime)}mins");
             context.Wait(MessageReceived);
 
             var resumptionCookie = new ResumptionCookie(context.Activity.AsMessageActivity());            
@@ -458,9 +463,8 @@ namespace HelloWorldBot.Dialogs
                 return;
             }
 
-            var logedFocusTime = currentTask.TimeLogs.Sum(i => (i.EndTime - i.StartTime).TotalSeconds);
-            var beingTrackedFocusTime = (DateTimeOffset.UtcNow - informDuartionStarTime).TotalSeconds;
-            await context.PostAsync($"Awesome! You have been focused on {currentTask.Description} for {Math.Round(logedFocusTime + beingTrackedFocusTime)}mins");
+            var beingTrackedFocusTime = (DateTimeOffset.UtcNow - informDuartionStarTime).TotalMinutes;
+            await context.PostAsync($"Awesome! You have been focused on {currentTask.Description} for {Math.Round(beingTrackedFocusTime)}mins");
 
             var options = new[] { "Ok I will", "Remind me in 5", "Remind me in 10", "Remind me in 15" };
             var dialog = new PromptDialog.PromptChoice<string>(options, "To help your focus, take a break for 5mins now", null, 3);
@@ -495,7 +499,7 @@ namespace HelloWorldBot.Dialogs
             }
 
             var options = new[] { "Yes Resume", "No I am working on something else" };
-            var dialog = new PromptDialog.PromptChoice<string>(options, $"Let's go back to work on {pausedTask.Description}", null, 3);
+            var dialog = new PromptDialog.PromptChoice<string>(options, $"Let's get back to work on {pausedTask.Description}", null, 3);
             context.Call(dialog, AfterOfferResumeAfterPasue);
         }
 
@@ -525,10 +529,10 @@ namespace HelloWorldBot.Dialogs
             SendMessageToBot(resume, message);
         }
 
-        public void StartTrackTimeProcesses(IDialogContext context)
+        public async Task StartTrackTimeProcesses(IDialogContext context)
         {
             TaskViewModel currentTask = context.UserData.Get<TaskViewModel>(DataKeyManager.CurrentTask);
-            context.UserData.SetValue(DataKeyManager.InformDurationStartTime, DateTimeOffset.UtcNow);
+            context.UserData.SetValue(DataKeyManager.InformDurationStartTime, await DateTimeOffsetNow(context));
 
             var resumptionCookie = new ResumptionCookie(context.Activity.AsMessageActivity());
             BackgroundJob.Schedule(() => TriggerInformDuration(resumptionCookie, currentTask.Id), TimeSpan.FromMinutes(15));
@@ -607,7 +611,7 @@ namespace HelloWorldBot.Dialogs
             if (context.UserData.TryGetValue(DataKeyManager.CurrentTask, out currentTask))
             {
                 await context.PostAsync($"Timer has started for {currentTask.Description}");
-                StartTrackTimeProcesses(context);
+                await StartTrackTimeProcesses(context);
             }
             context.Wait(MessageReceived);
         }
@@ -621,13 +625,13 @@ namespace HelloWorldBot.Dialogs
                 case "Yes":
                     DateTimeOffset lastStartTimer;
                     var canGetLastStartTimer = context.UserData.TryGetValue(DataKeyManager.InformDurationStartTime, out lastStartTimer);
-                    if (canGetLastStartTimer && lastStartTimer.Date != DateTimeOffset.Now.Date)
+                    if (canGetLastStartTimer && lastStartTimer.Date != (await DateTimeOffsetNow(context)).Date)
                     {
                         await context.PostAsync("Remember you can tell me to switch or pause at any time, but it is best to remain focused on this single task!  ... so I'll shut up now until time is up.");
                     }
                     context.UserData.SetValue(DataKeyManager.CurrentTask, suggestTask);
 
-                    StartTrackTimeProcesses(context);
+                    await StartTrackTimeProcesses(context);
 
                     await context.PostAsync($"Timer has stared for: {suggestTask.Description}");
                     context.Wait(MessageReceived);
@@ -654,7 +658,7 @@ namespace HelloWorldBot.Dialogs
             var tasks = taskService.GetTasks(context.Activity.From.Id, taskDescription);
 
             context.UserData.SetValue(DataKeyManager.CurrentTask, tasks.First());
-            StartTrackTimeProcesses(context);
+            await StartTrackTimeProcesses(context);
             await context.PostAsync($"Timer has started for {tasks.First().Description}");
             context.Wait(MessageReceived);
         }
@@ -766,15 +770,15 @@ namespace HelloWorldBot.Dialogs
             taskService.AddTimeLog(new TimeLogViewModel
                                    {
                                        StartTime = startTime,
-                                       EndTime = DateTimeOffset.UtcNow
+                                       EndTime = await DateTimeOffsetNow(context)
                                    },
                                    currentTask.Id);
 
             currentTask.TimeLogs.Add(new TimeLogViewModel
                                      {
                                          StartTime = startTime,
-                                         EndTime = DateTimeOffset.UtcNow
-                                     });
+                                         EndTime = await DateTimeOffsetNow(context)
+            });
             context.UserData.RemoveValue(DataKeyManager.CurrentTask);
             context.UserData.RemoveValue(DataKeyManager.InformDurationStartTime);
 
@@ -816,7 +820,6 @@ namespace HelloWorldBot.Dialogs
             {
                 Description = taskDescription,
                 AddedByUserId = context.Activity.From.Id,
-                Created = DateTimeOffset.UtcNow,
                 UserId =  context.Activity.From.Id,
                 TimeLogs =  new List<TimeLogViewModel>()
             };
@@ -917,6 +920,7 @@ namespace HelloWorldBot.Dialogs
                 case "Complete":                    
                     taskService.RemoveTask(currentTask.Id);
                     context.UserData.RemoveValue(DataKeyManager.CurrentTask);
+                    
                     await context.PostAsync($"{currentTask.Description} has been stopped and removed from your task list.");
 
                     var remainTaskCount = taskService.GetTaskCount(context.Activity.From.Id);
@@ -931,7 +935,7 @@ namespace HelloWorldBot.Dialogs
                         context.UserData.SetValue(DataKeyManager.SuggestFocusTask, taskService.GetFirstTask(context.Activity.From.Id));
 
                         var promptOptions = new[] { "Yes", "Not yet" };
-                        var dialog = new PromptDialog.PromptChoice<string>(promptOptions, $"Shall we start on {taskService.GetFirstTask(context.Activity.From.Id)}?", null, 3);
+                        var dialog = new PromptDialog.PromptChoice<string>(promptOptions, $"Shall we start on {taskService.GetFirstTask(context.Activity.From.Id).Description}?", null, 3);
                         context.Call(dialog, AfterSuggestFocusOnTask);
                     }
                     else
@@ -939,7 +943,7 @@ namespace HelloWorldBot.Dialogs
                         context.UserData.SetValue(DataKeyManager.SuggestFocusTask, taskService.GetFirstTask(context.Activity.From.Id));
 
                         var promptOptions = new[] { "Yes", "List tasks pending" };
-                        var dialog = new PromptDialog.PromptChoice<string>(promptOptions, $"Shall we start on {taskService.GetFirstTask(context.Activity.From.Id)}?", null, 3);
+                        var dialog = new PromptDialog.PromptChoice<string>(promptOptions, $"Shall we start on {taskService.GetFirstTask(context.Activity.From.Id).Description}?", null, 3);
                         context.Call(dialog, AfterSuggestFocusOnTask);
                     }
                     break;
@@ -951,7 +955,7 @@ namespace HelloWorldBot.Dialogs
             }
         }
 
-        private async Task<string> GetProfileUrl(string userId)
+        private async Task<FacebookUserProfile> GetProfile(string userId)
         {
             try
             {
@@ -960,18 +964,19 @@ namespace HelloWorldBot.Dialogs
                 var url = $"https://graph.facebook.com/v2.6/{userId}?fields=first_name,last_name,profile_pic,locale,timezone,gender&access_token={ConfigurationReader.AppAccessToken}";
                 var responseString = await httpClient.GetStringAsync(url);
                 var profile = JsonConvert.DeserializeObject<FacebookUserProfile>(responseString);
+                return profile;
 
-                var profilePicture = profile.ProfilePicture.Split(new[] { ".jpg" }, StringSplitOptions.None)
-                                            .First()
-                                            .Split('/')
-                                            .Last();
+                //var profilePicture = profile.ProfilePicture.Split(new[] { ".jpg" }, StringSplitOptions.None)
+                //                            .First()
+                //                            .Split('/')
+                //                            .Last();
 
-                return $"{profilePicture}.jpg";
+                //return $"{profilePicture}.jpg";
 
             }
             catch (Exception)
             {
-                return string.Empty;
+                return null;
             }
         }
 
@@ -1070,13 +1075,14 @@ namespace HelloWorldBot.Dialogs
                     BackgroundJob.Schedule(() => SendMessageToBot(resumptionCookie, message), TimeSpan.FromMinutes(60));
                     break;
                 case "I will comeback tomorrow":
-                    if (DateTimeOffset.UtcNow.Hour < 8)
+                    var clientTime = await DateTimeOffsetNow(context);
+                    if ( clientTime.Hour < 8)
                     {
-                        BackgroundJob.Schedule(() => SendMessageToBot(resumptionCookie, message), DateTimeOffset.UtcNow.Date.AddHours(8));
+                        BackgroundJob.Schedule(() => SendMessageToBot(resumptionCookie, message), clientTime.Date.AddHours(8));
                     }                    
                     else
                     {
-                        BackgroundJob.Schedule(() => SendMessageToBot(resumptionCookie, message), DateTimeOffset.UtcNow.Date.AddDays(1).AddHours(8));
+                        BackgroundJob.Schedule(() => SendMessageToBot(resumptionCookie, message), clientTime.Date.AddHours(32));
                     }                    
                     break;
             }
@@ -1099,16 +1105,47 @@ namespace HelloWorldBot.Dialogs
 
                 using (var content = new FormUrlEncodedContent(values))
                 {
-                    var response = client.PostAsync("/common/oauth2/v2.0/token", content).Result;
+                    var response = client.PostAsync("/common/oauth2/v2.0/token", content)
+                                         .Result;
                     response.EnsureSuccessStatusCode();
 
-                    var stringResponse = response.Content.ReadAsStringAsync().Result;
+                    var stringResponse = response.Content.ReadAsStringAsync()
+                                                 .Result;
                     dynamic responseObject = JsonConvert.DeserializeObject(stringResponse);
 
                     return responseObject.access_token;
                 }
             }
         }
+
+        private async Task<int> GetTimeZone(IDialogContext context)
+        {
+            int timezone;
+
+            if (context.UserData.TryGetValue(DataKeyManager.Timezone, out timezone))
+            {
+                return timezone; 
+            }
+
+            var profile = await GetProfile(context.Activity.From.Id);
+
+            context.UserData.SetValue(DataKeyManager.Timezone, int.Parse(profile.Timezone));
+            return int.Parse(profile.Timezone);
+        }
+
+        //It's not system time, it's client side time
+        private async Task<DateTimeOffset> DateTimeOffsetNow(IDialogContext context)
+        {
+            var timezone = await GetTimeZone(context);
+
+            return new DateTimeOffset(DateTime.UtcNow.Year,
+                                      DateTime.UtcNow.Month,
+                                      DateTime.UtcNow.Day,
+                                      DateTime.UtcNow.Hour + timezone,
+                                      DateTime.UtcNow.Minute,
+                                      DateTime.UtcNow.Second,
+                                      TimeSpan.FromHours(timezone));
+        }        
     }
 
     internal class FacebookUserProfile
@@ -1121,6 +1158,9 @@ namespace HelloWorldBot.Dialogs
 
         [JsonProperty("profile_pic")]
         public string ProfilePicture { get; set; }
+
+        [JsonProperty("timezone")]
+        public string Timezone { get; set; }
     }
 
     public class CustomMicrosoftAppCredentials : MicrosoftAppCredentials
