@@ -65,6 +65,7 @@ namespace HelloWorldBot.Dialogs
         [LuisIntent("None")]        
         public async Task None(IDialogContext context, LuisResult result)
         {
+            context.UserData.SetValue(DataKeyManager.LastAction, DateTimeOffsetNow(context));
             await context.PostAsync("Sorry I dont understand you.");
             context.Wait(MessageReceived);
         }
@@ -73,13 +74,13 @@ namespace HelloWorldBot.Dialogs
         public async Task Greeting(IDialogContext context, LuisResult result)
         {
             DateTimeOffset lastUpdate;
-            var canGetLastUpdate = context.UserData.TryGetValue(DataKeyManager.LastUpdate, out lastUpdate);
+            var canGetLastUpdate = context.UserData.TryGetValue(DataKeyManager.LastAction, out lastUpdate);
 
             if (!canGetLastUpdate || lastUpdate.Date !=  await DateTimeOffsetNow(context))
             {                
-                await context.PostAsync("Hey Ninja!  Ready to be productive today? ");                
-                context.UserData.SetValue(DataKeyManager.LastUpdate, await DateTimeOffsetNow(context));
-            }            
+                await context.PostAsync("Hey Ninja!  Ready to be productive today? ");                                
+            }
+            context.UserData.SetValue(DataKeyManager.LastAction, await DateTimeOffsetNow(context));
 
             TaskViewModel currentTask;
             if (context.UserData.TryGetValue(DataKeyManager.CurrentTask, out currentTask))
@@ -122,6 +123,7 @@ namespace HelloWorldBot.Dialogs
         [LuisIntent("WhatAreTags")]
         public async Task WhatAreTags(IDialogContext context, LuisResult result)
         {
+            context.UserData.SetValue(DataKeyManager.LastAction, await DateTimeOffsetNow(context));
             var card = new HeroCard
                        {
                            Title = "What are tags?",
@@ -149,6 +151,7 @@ namespace HelloWorldBot.Dialogs
         [LuisIntent("HowCanI")]
         public async Task HowCanI(IDialogContext context, LuisResult result)
         {
+            context.UserData.SetValue(DataKeyManager.LastAction, await DateTimeOffsetNow(context));
             var card = new HeroCard
             {
                 Title = "Faq",
@@ -176,6 +179,7 @@ namespace HelloWorldBot.Dialogs
         [LuisIntent("DefineTask")]
         public async Task DefineTask(IDialogContext context, LuisResult result)
         {
+            context.UserData.SetValue(DataKeyManager.LastAction, await DateTimeOffsetNow(context));
             var userId = context.Activity.From.Id;
             EntityRecommendation taskDescriptionEntity;
             if (result.TryFindEntity(LuisEntities.TaskTitle, out taskDescriptionEntity))
@@ -224,6 +228,7 @@ namespace HelloWorldBot.Dialogs
         [LuisIntent("ListTasks")]
         public async Task ListTasks(IDialogContext context, LuisResult result)
         {
+            context.UserData.SetValue(DataKeyManager.LastAction, await DateTimeOffsetNow(context));
             TaskViewModel task;
             var remainTaskCount = taskService.GetTaskCount(context.Activity.From.Id);
             if (context.UserData.TryGetValue(DataKeyManager.CurrentTask, out task))
@@ -265,6 +270,7 @@ namespace HelloWorldBot.Dialogs
         [LuisIntent("PauseTimer")]
         public async Task PauseTimer(IDialogContext context, LuisResult result)
         {
+            context.UserData.SetValue(DataKeyManager.LastAction, await DateTimeOffsetNow(context));
             TaskViewModel currentTask;
             if (!context.UserData.TryGetValue(DataKeyManager.CurrentTask, out currentTask))
             {
@@ -284,6 +290,7 @@ namespace HelloWorldBot.Dialogs
         [LuisIntent("StopTimer")]
         public async Task StopTimer(IDialogContext context, LuisResult result)
         {
+            context.UserData.SetValue(DataKeyManager.LastAction, await DateTimeOffsetNow(context));
             TaskViewModel currentTask;
             if (!context.UserData.TryGetValue(DataKeyManager.CurrentTask, out currentTask))
             {
@@ -302,6 +309,7 @@ namespace HelloWorldBot.Dialogs
         [LuisIntent("ResumeTimer")]
         public async Task ResumeTimer(IDialogContext context, LuisResult result)
         {
+            context.UserData.SetValue(DataKeyManager.LastAction, await DateTimeOffsetNow(context));
             TaskViewModel pausedTask;
             if (!context.UserData.TryGetValue(DataKeyManager.PausedTask, out pausedTask))
             {
@@ -328,6 +336,7 @@ namespace HelloWorldBot.Dialogs
         [LuisIntent("AddTask")]
         public async Task AddTask(IDialogContext context, LuisResult result)
         {
+            context.UserData.SetValue(DataKeyManager.LastAction, await DateTimeOffsetNow(context));
             var taskQuery = new TaskQuery();
 
             var taskForm = new FormDialog<TaskQuery>(taskQuery, BuildTaskForm, FormOptions.PromptInStart);
@@ -337,6 +346,7 @@ namespace HelloWorldBot.Dialogs
         [LuisIntent("StartTimer")]
         public async Task StartTimer(IDialogContext context, LuisResult result)
         {
+            context.UserData.SetValue(DataKeyManager.LastAction, await DateTimeOffsetNow(context));
             EntityRecommendation taskTitleWithTagsEntity;
 
             result.TryFindEntity(LuisEntities.TaskTitle, out taskTitleWithTagsEntity);
@@ -379,6 +389,7 @@ namespace HelloWorldBot.Dialogs
         [LuisIntent("ListMyTags")]
         public async Task ListMyTags(IDialogContext context, LuisResult result)
         {
+            context.UserData.SetValue(DataKeyManager.LastAction, await DateTimeOffsetNow(context));
             TaskViewModel currenTask;
             if(!context.UserData.TryGetValue(DataKeyManager.CurrentTask, out currenTask))
             {
@@ -506,6 +517,7 @@ namespace HelloWorldBot.Dialogs
         [LuisIntent("StopWorking")]
         public async Task StopWorking(IDialogContext context, LuisResult result)
         {
+            context.UserData.SetValue(DataKeyManager.LastAction, await DateTimeOffsetNow(context));
             TaskViewModel currentTask;
             if (context.UserData.TryGetValue(DataKeyManager.CurrentTask, out currentTask))
             {
@@ -515,6 +527,48 @@ namespace HelloWorldBot.Dialogs
             var options = new[] { "OK", "I will comeback tomorrow" };
             var dialog = new PromptDialog.PromptChoice<string>(options, "Do you want to comeback after 60mins?", null, 3);
             context.Call(dialog, AfterConfirmStopWorking);
+        }
+
+        [LuisIntent("ConfirmOvernight")]
+        public async Task ConfirmOvernight(IDialogContext context, LuisResult result)
+        {
+            EntityRecommendation confirmOvernighTaskIdEntity;
+            if (!result.TryFindEntity(LuisEntities.TaskId, out confirmOvernighTaskIdEntity))
+            {
+                context.Wait(MessageReceived);
+                return;
+            }
+            var confirmOvernightTaskId = int.Parse(confirmOvernighTaskIdEntity.Entity);
+
+            TaskViewModel currentTask;
+            if (!context.UserData.TryGetValue(DataKeyManager.CurrentTask, out currentTask)
+                || currentTask.Id != confirmOvernightTaskId)
+            {
+                context.Wait(MessageReceived);
+                return;
+            }
+
+            DateTimeOffset informDuartionStarTime;
+            if (!context.UserData.TryGetValue(DataKeyManager.InformDurationStartTime, out informDuartionStarTime))
+            {
+                context.Wait(MessageReceived);
+                return;
+            }
+
+            DateTimeOffset lastAction;
+            if (!context.UserData.TryGetValue(DataKeyManager.LastAction, out lastAction))
+            {
+                context.Wait(MessageReceived);
+                return;
+            }
+
+            var beingTrackedFocusTime = (DateTimeOffset.UtcNow - informDuartionStarTime).TotalMinutes;
+            var options = new[] { "Yes", "No" };
+            var dialog = new PromptDialog.PromptChoice<string>(options, $"Were you working on {currentTask.Description} until know? " +
+                                                                        $"The last I hear from wast at {lastAction.ToString("dd/MM HH:mm")} " +
+                                                                        $"and you had been working for {Math.Round(beingTrackedFocusTime)}mins", null, 3);
+            context.Call(dialog, AfterConfirmOvernight);
+
         }
 
         public void TriggerInformDuration(ResumptionCookie resume, long needInformTaskId)
@@ -534,9 +588,19 @@ namespace HelloWorldBot.Dialogs
             TaskViewModel currentTask = context.UserData.Get<TaskViewModel>(DataKeyManager.CurrentTask);
             context.UserData.SetValue(DataKeyManager.InformDurationStartTime, await DateTimeOffsetNow(context));
 
+            var midnight = await DateTimeOffsetNow(context);
+            midnight = midnight.Date.AddHours(24);
+
             var resumptionCookie = new ResumptionCookie(context.Activity.AsMessageActivity());
-            BackgroundJob.Schedule(() => TriggerInformDuration(resumptionCookie, currentTask.Id), TimeSpan.FromMinutes(15));
+            BackgroundJob.Schedule(() => TriggerInformDuration(resumptionCookie, currentTask.Id), TimeSpan.FromMinutes(15));            
             BackgroundJob.Schedule(() => TriggerSuggestBreak(resumptionCookie, currentTask.Id), TimeSpan.FromMinutes(25));
+            BackgroundJob.Schedule(() => TriggerConfirmOvernight(resumptionCookie, currentTask.Id), midnight);
+        }
+
+        public void TriggerConfirmOvernight(ResumptionCookie resumptionCookie, long needConfirmOvernightTaskId)
+        {
+            var message = $"Confirm overnight {needConfirmOvernightTaskId}";
+            SendMessageToBot(resumptionCookie, message);
         }
 
         public ResumptionCookie RestoreResumptionCookie(ResumptionCookie resume)
@@ -618,6 +682,7 @@ namespace HelloWorldBot.Dialogs
 
         private async Task AfterSuggestFocusOnTask(IDialogContext context, IAwaitable<string> result)
         {
+            context.UserData.SetValue(DataKeyManager.LastAction, DateTimeOffsetNow(context));
             TaskViewModel suggestTask;
             context.UserData.TryGetValue(DataKeyManager.SuggestFocusTask, out suggestTask);
             switch (await result)
@@ -654,6 +719,7 @@ namespace HelloWorldBot.Dialogs
 
         private async Task AfterChoseTaskFromPendingList(IDialogContext context, IAwaitable<string> result)
         {
+            context.UserData.SetValue(DataKeyManager.LastAction, DateTimeOffsetNow(context));
             var taskDescription = await result;
             var tasks = taskService.GetTasks(context.Activity.From.Id, taskDescription);
 
@@ -665,6 +731,7 @@ namespace HelloWorldBot.Dialogs
 
         private async Task AfterOfferTags(IDialogContext context, IAwaitable<string> result)
         {
+            context.UserData.SetValue(DataKeyManager.LastAction, DateTimeOffsetNow(context));
             switch (await result)
             {
                 case "What are tags?":
@@ -706,6 +773,7 @@ namespace HelloWorldBot.Dialogs
 
         private async Task AfterOfferTagCapitalWords(IDialogContext context, IAwaitable<string> result)
         {
+            context.UserData.SetValue(DataKeyManager.LastAction, DateTimeOffsetNow(context));
             switch (await result)
             {
                 case "No":
@@ -740,6 +808,7 @@ namespace HelloWorldBot.Dialogs
 
         private async Task AfterConfirmActiveTask(IDialogContext context, IAwaitable<string> result)
         {
+            context.UserData.SetValue(DataKeyManager.LastAction, DateTimeOffsetNow(context));
             switch (await result)
             {
                 case "Yes":
@@ -789,7 +858,7 @@ namespace HelloWorldBot.Dialogs
         }
 
         private async Task AfterTaskForm(IDialogContext context, IAwaitable<TaskQuery> result)
-        {
+        {            
             var taskQuery = await result;
             await CreateTaskAsync(context, taskQuery.Description, false);
         }
@@ -913,6 +982,7 @@ namespace HelloWorldBot.Dialogs
 
         private async Task AfterConfirmStopTask(IDialogContext context, IAwaitable<string> result)
         {
+            context.UserData.SetValue(DataKeyManager.LastAction, DateTimeOffsetNow(context));
             var currentTask = context.UserData.Get<TaskViewModel>(DataKeyManager.CurrentTask);
             context.UserData.RemoveValue(DataKeyManager.CurrentTask);
             switch (await result)
@@ -982,6 +1052,7 @@ namespace HelloWorldBot.Dialogs
 
         private async Task AfterChoseRemindTimeAfterPauseTask(IDialogContext context, IAwaitable<string> result)
         {
+            context.UserData.SetValue(DataKeyManager.LastAction, DateTimeOffsetNow(context));
             var resume = new ResumptionCookie(context.Activity.AsMessageActivity());            
             var pauseTask = context.UserData.Get<TaskViewModel>(DataKeyManager.PausedTask);
             
@@ -1002,6 +1073,7 @@ namespace HelloWorldBot.Dialogs
 
         private async Task AfterOfferResumeAfterPasue(IDialogContext context, IAwaitable<string> result)
         {
+            context.UserData.SetValue(DataKeyManager.LastAction, DateTimeOffsetNow(context));
             switch (await result)
             {
                 case "Yes Resume":
@@ -1021,6 +1093,7 @@ namespace HelloWorldBot.Dialogs
 
         private async Task AfterSuggestBeeak(IDialogContext context, IAwaitable<string> result)
         {
+            context.UserData.SetValue(DataKeyManager.LastAction, DateTimeOffsetNow(context));
             var resume = new ResumptionCookie(context.Activity.AsMessageActivity());
             TaskViewModel currentTask;
             if (!context.UserData.TryGetValue(DataKeyManager.CurrentTask, out currentTask))
@@ -1065,6 +1138,7 @@ namespace HelloWorldBot.Dialogs
 
         private async Task AfterConfirmStopWorking(IDialogContext context, IAwaitable<string> result)
         {
+            context.UserData.SetValue(DataKeyManager.LastAction, DateTimeOffsetNow(context));
             var resumptionCookie = new ResumptionCookie(context.Activity.AsMessageActivity());
             var pausedTask = context.UserData.Get<TaskViewModel>(DataKeyManager.PausedTask);
 
@@ -1087,6 +1161,57 @@ namespace HelloWorldBot.Dialogs
                     break;
             }
         }
+
+        private async Task AfterConfirmOvernight(IDialogContext context, IAwaitable<string> result)
+        {
+            switch (await result)
+            {
+                case "Yes":
+                    await context.PostAsync("I will keep timer running");
+                    break;
+
+                case "No":
+                    DateTimeOffset startTime;
+                    if (!context.UserData.TryGetValue(DataKeyManager.InformDurationStartTime, out startTime))
+                    {
+                        await context.PostAsync("Add time log fail because cant get InformDurationStartTime");
+                        context.Wait(MessageReceived);
+                        return;
+                    }
+
+                    DateTimeOffset lastAction;
+                    if (!context.UserData.TryGetValue(DataKeyManager.LastAction, out lastAction))
+                    {
+                        await context.PostAsync("Add time log fail because cant get LastAction");
+                        context.Wait(MessageReceived);
+                        return;
+                    }
+
+                    var currentTask = context.UserData.Get<TaskViewModel>(DataKeyManager.CurrentTask);
+
+                    taskService.AddTimeLog(new TimeLogViewModel
+                                           {
+                                               StartTime = startTime,
+                                               EndTime = lastAction
+                                           },
+                                           currentTask.Id);
+
+                    currentTask.TimeLogs.Add(new TimeLogViewModel
+                                             {
+                                                 StartTime = startTime,
+                                                 EndTime = lastAction
+                                             });
+
+                    context.UserData.RemoveValue(DataKeyManager.CurrentTask);
+                    context.UserData.RemoveValue(DataKeyManager.InformDurationStartTime);
+                    context.UserData.SetValue(DataKeyManager.PausedTask, currentTask);
+
+                    await context.PostAsync("Ok I will store to last interaction with you");
+                    break;
+            }
+            context.Wait(MessageReceived);
+        }
+
 
         public string GetAuthToken(string appId, string appKey)
         {

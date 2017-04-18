@@ -10,7 +10,7 @@
 
         public static string CurrentTags => "CurrentTags";
 
-        public static string LastUpdate => "LastUpdate";
+        public static string LastAction => "LastAction";
 
         public static string SuggestTask => "SuggestTask";
 
