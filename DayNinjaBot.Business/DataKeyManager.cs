@@ -21,5 +21,11 @@
         public static string InformDurationStartTime => "InformDuartion";
 
         public static string Timezone => "Timezone";
+
+        public static string IsOnBoard => "IsOnBoard";
+
+        public static string CheckinTime => "CheckinTime";
+
+        public static string CheckinWeekkend => "CheckinWeekend";
     }
 }

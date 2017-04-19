@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Resources;
 using System.Runtime.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,6 +20,7 @@ using DayNinjaBot.Data;
 using Hangfire;
 using HelloWorldBot.Models;
 using HelloWorldBot.Queries;
+using HelloWorldBot.Resources;
 using Microsoft.Bot.Builder.Dialogs;
 using Microsoft.Bot.Builder.FormFlow;
 using Microsoft.Bot.Builder.Internals.Fibers;
@@ -74,6 +76,17 @@ namespace HelloWorldBot.Dialogs
         [LuisIntent("Greeting")]
         public async Task Greeting(IDialogContext context, LuisResult result)
         {
+            bool isOnboard;
+            if (!context.UserData.TryGetValue(DataKeyManager.IsOnBoard, out isOnboard))
+            {
+               AskToJoin(context, result);
+            }
+                        
+            if (!isOnboard)
+            {
+                return;
+            }
+
             DateTimeOffset lastUpdate;
             var canGetLastUpdate = context.UserData.TryGetValue(DataKeyManager.LastAction, out lastUpdate);
 
@@ -113,7 +126,7 @@ namespace HelloWorldBot.Dialogs
                 var dialog = new PromptDialog.PromptChoice<string>(promptOptions, $"Shall we start on {taskService.GetFirstTask(userId).Description}?", null, 3);
                 context.Call(dialog, AfterSuggestFocusOnTask);
             }            
-        }
+        }        
 
         [LuisIntent("ConversationUpdate")]
         public async Task ConversationUpdate(IDialogContext context, LuisResult result)
@@ -654,6 +667,18 @@ namespace HelloWorldBot.Dialogs
                 var result = client.PostAsJsonAsync("/api/messages", messageActivity)
                                    .Result;
             }
+        }
+
+        private void AskToJoin(IDialogContext context, LuisResult result)
+        {
+            var letter = string.Format(Language.AskToJoinLetter, context.Activity.From.Name);
+            var options = new[]
+                          {
+                              Language.YesBringItOn,
+                              Language.NoIamNotInterestedImprovingMyLife
+                          };
+            var dialog = new PromptDialog.PromptChoice<string>(options, letter, null, 3);
+            context.Call(dialog, AfterOfferOnboard);
         }
 
         private async Task AfterOfferKnowAboutTags(IDialogContext context, IAwaitable<string> result)
@@ -1222,6 +1247,80 @@ namespace HelloWorldBot.Dialogs
             context.Wait(MessageReceived);
         }
 
+        private async Task AfterOfferOnboard(IDialogContext context, IAwaitable<string> result)
+        {
+            if (await result == Language.YesBringItOn)
+            {
+                context.UserData.SetValue(DataKeyManager.IsOnBoard, true);
+                var options = new[]
+                              {
+                                  Language.EightHour,
+                                  Language.HalfPastEight,
+                                  Language.NineHour,
+                                  Language.TenHour
+                              };
+                var dialog = new PromptDialog.PromptChoice<string>(options, Language.AskTimeForCheckin, null, 3);
+                context.Call(dialog, AfterOfferCheckinTime);
+            }
+            else if (await result == Language.NoIamNotInterestedImprovingMyLife)
+            {
+                context.UserData.SetValue(DataKeyManager.IsOnBoard, false);
+                await context.PostAsync(Language.SorryForNotBeingOnBoard);
+                context.Wait(MessageReceived);
+            }
+        }
+
+        private async Task AfterOfferCheckinTime(IDialogContext context, IAwaitable<string> result)
+        {
+            var choice = await result;
+            if (choice == Language.EightHour)
+            {
+                context.UserData.SetValue(DataKeyManager.CheckinTime, new TimeSpan(8, 0, 0));
+            }
+            else if (choice == Language.HalfPastEight)
+            {
+                context.UserData.SetValue(DataKeyManager.CheckinTime, new TimeSpan(8, 30, 0));
+            }
+            else if (choice == Language.NineHour)
+            {
+                context.UserData.SetValue(DataKeyManager.CheckinTime, new TimeSpan(9, 0, 0));
+            }
+            else if (choice == Language.TenHour)
+            {
+                context.UserData.SetValue(DataKeyManager.CheckinTime, new TimeSpan(9, 10, 0));
+            }
+
+            await context.PostAsync(string.Format(Language.InformCheckIntime, choice));
+
+            var options = new[]
+                          {
+                              Language.No,
+                              Language.Saturday,
+                              Language.BothSaturdaySunday
+                          };
+            var dialog = new PromptDialog.PromptChoice<string>(options, Language.AskIfCheckInWeekend, null, 3);
+            context.Call(dialog, AfterAskIfCheckInWeekend);
+        }
+
+        private async Task AfterAskIfCheckInWeekend(IDialogContext context, IAwaitable<string> result)
+        {
+            var choice = await result;
+            if (choice == Language.No)
+            {
+                context.UserData.SetValue(DataKeyManager.CheckinWeekkend, CheckInWeekend.No);
+            }
+            else if (choice == Language.Saturday)
+            {
+                context.UserData.SetValue(DataKeyManager.CheckinWeekkend, CheckInWeekend.Saturday);
+            }
+            else if (choice == Language.BothSaturdaySunday)
+            {
+                context.UserData.SetValue(DataKeyManager.CheckinWeekkend, CheckInWeekend.BothSaturdayAndSunday);
+            }
+
+            await context.PostAsync(Language.OkNoted);
+            await Greeting(context, new LuisResult());
+        }
 
         public string GetAuthToken(string appId, string appKey)
         {
@@ -1271,6 +1370,11 @@ namespace HelloWorldBot.Dialogs
         //It's not system time, it's client side time
         private async Task<DateTimeOffset> DateTimeOffsetNow(IDialogContext context)
         {
+            if (context.Activity.ChannelId != "facebook")
+            {
+                return DateTimeOffset.UtcNow;
+            }
+
             var timezone = await GetTimeZone(context);
 
             return new DateTimeOffset(DateTime.UtcNow.Year,
@@ -1296,14 +1400,5 @@ namespace HelloWorldBot.Dialogs
 
         [JsonProperty("timezone")]
         public string Timezone { get; set; }
-    }
-
-    public class CustomMicrosoftAppCredentials : MicrosoftAppCredentials
-    {
-        public CustomMicrosoftAppCredentials(string appId, string appPassword) : base(appId, appPassword)
-        {
-        }
-
-        public override string OAuthScope => "https://api.botframework.com/.default";
     }
 }
