@@ -8,6 +8,7 @@ using System.Net.Http.Headers;
 using System.Runtime.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Web.Script.Serialization;
 using Autofac;
 using Autofac.Core;
 using Autofac.Integration.WebApi;
@@ -179,40 +180,49 @@ namespace HelloWorldBot.Dialogs
         [LuisIntent("DefineTask")]
         public async Task DefineTask(IDialogContext context, LuisResult result)
         {
-            context.UserData.SetValue(DataKeyManager.LastAction, await DateTimeOffsetNow(context));
-            var userId = context.Activity.From.Id;
-            EntityRecommendation taskDescriptionEntity;
-            if (result.TryFindEntity(LuisEntities.TaskTitle, out taskDescriptionEntity))
+            try
             {
-                var description = PreProcessTitleEntity(taskDescriptionEntity);
-
-                var tasks = taskService.GetTasks(userId, description);
-
-                if (!tasks.Any())
+                context.UserData.SetValue(DataKeyManager.LastAction, await DateTimeOffsetNow(context));
+                var userId = context.Activity.From.Id;
+                EntityRecommendation taskDescriptionEntity;
+                if (result.TryFindEntity(LuisEntities.TaskTitle, out taskDescriptionEntity))
                 {
-                    await CreateTaskAsync(context, string.Join(" ", description));
-                    return;
-                }
-                var task = tasks.First();
+                    var description = PreProcessTitleEntity(taskDescriptionEntity);
 
-                TaskViewModel currentTask;
-                if (context.UserData.TryGetValue(DataKeyManager.CurrentTask, out currentTask))
+                    var tasks = taskService.GetTasks(userId, description);
+
+                    if (!tasks.Any())
+                    {
+                        await CreateTaskAsync(context, string.Join(" ", description));
+                        return;
+                    }
+                    var task = tasks.First();
+
+                    TaskViewModel currentTask;
+                    if (context.UserData.TryGetValue(DataKeyManager.CurrentTask, out currentTask))
+                    {
+                        var tagStrings = currentTask.Tags.Select(i => $"#{i}");
+                        await EndTrackTimeAsync(context, true);
+                        await context.PostAsync($"OK, I'll pause this {string.Join(",", tagStrings)} {currentTask.Description} here.");
+                    }
+
+                    context.UserData.SetValue(DataKeyManager.CurrentTask, task);
+                    await StartTrackTimeProcesses(context);
+
+                    await context.PostAsync($"Timer start for {task.Description}");
+                    context.Wait(MessageReceived);
+                }
+                else
                 {
-                    var tagStrings = currentTask.Tags.Select(i => $"#{i}");
-                    await EndTrackTimeAsync(context, true);
-                    await context.PostAsync($"OK, I'll pause this {string.Join(",", tagStrings)} {currentTask.Description} here.");
+                    await context.PostAsync("Sorry, I cannot understand what that task is. Please phase 'I am working on (say what you are working on, include #hashtags too if you like)");
+                    context.Wait(MessageReceived);
                 }
 
-                context.UserData.SetValue(DataKeyManager.CurrentTask, task);                
-                await StartTrackTimeProcesses(context);
-
-                await context.PostAsync($"Timer start for {task.Description}");
-                context.Wait(MessageReceived);
             }
-            else
+            catch (Exception ex)
             {
-                await context.PostAsync("Sorry, I cannot understand what that task is. Please phase 'I am working on (say what you are working on, include #hashtags too if you like)");
-                context.Wait(MessageReceived);
+                await context.PostAsync(context.Activity.From.Id);
+                await context.PostAsync(ex.Message);
             }
         }
 
@@ -440,9 +450,9 @@ namespace HelloWorldBot.Dialogs
             var task = taskService.GetTask(needInformTaskId);
             var beingTrackedFocusTime = (DateTimeOffset.UtcNow - informDuartionStarTime).TotalMinutes;
 
-            await context.PostAsync($"Awesome! You have been focused on {task.Description} for {Math.Round(beingTrackedFocusTime)}mins");
+            await context.PostAsync($"Awesome! You have been focused on {task.Description} for {Math.Round(beingTrackedFocusTime)}mins since your last break");
             context.Wait(MessageReceived);
-
+            
             var resumptionCookie = new ResumptionCookie(context.Activity.AsMessageActivity());            
             BackgroundJob.Schedule(() => TriggerInformDuration(resumptionCookie, needInformTaskId), TimeSpan.FromMinutes(15));
         }
@@ -1031,7 +1041,7 @@ namespace HelloWorldBot.Dialogs
             {
                 var httpClient = new HttpClient();
 
-                var url = $"https://graph.facebook.com/v2.6/{userId}?fields=first_name,last_name,profile_pic,locale,timezone,gender&access_token={ConfigurationReader.AppAccessToken}";
+                var url = $"https://graph.facebook.com/v2.9/{userId}?access_token={ConfigurationReader.AppAccessToken}";
                 var responseString = await httpClient.GetStringAsync(url);
                 var profile = JsonConvert.DeserializeObject<FacebookUserProfile>(responseString);
                 return profile;
