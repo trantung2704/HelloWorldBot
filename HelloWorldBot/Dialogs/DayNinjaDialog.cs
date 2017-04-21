@@ -79,7 +79,7 @@ namespace HelloWorldBot.Dialogs
             bool isOnboard;
             if (!context.UserData.TryGetValue(DataKeyManager.IsOnBoard, out isOnboard))
             {
-               AskToJoin(context, result);
+               await AskToJoin(context);
             }
                         
             if (!isOnboard)
@@ -680,15 +680,17 @@ namespace HelloWorldBot.Dialogs
             }
         }
 
-        private void AskToJoin(IDialogContext context, LuisResult result)
+        private async Task AskToJoin(IDialogContext context)
         {
             var letter = string.Format(Language.AskToJoinLetter, context.Activity.From.Name);
+            await context.PostAsync(letter);
+
             var options = new[]
                           {
                               Language.YesBringItOn,
                               Language.NoIamNotInterestedImprovingMyLife
                           };
-            var dialog = new PromptDialog.PromptChoice<string>(options, letter, null, 3);
+            var dialog = new PromptDialog.PromptChoice<string>(options, Language.AsktoJoinQuestion, null, 3);
             context.Call(dialog, AfterOfferOnboard);
         }
 
@@ -1266,6 +1268,8 @@ namespace HelloWorldBot.Dialogs
         {
             if (await result == Language.YesBringItOn)
             {
+                await context.PostAsync(Language.WelcomeOnboard);
+
                 context.UserData.SetValue(DataKeyManager.IsOnBoard, true);
                 var options = new[]
                               {

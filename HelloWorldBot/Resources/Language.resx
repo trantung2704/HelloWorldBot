@@ -121,9 +121,7 @@
     <value>Do you want me to check in with you on weekends too?</value>
   </data>
   <data name="AskTimeForCheckin" xml:space="preserve">
-    <value>Awesome! The journey will require discipline and your commitment to improve your life.  I’ll assume you read everything and do everything in order to succeed. Let’s do this!  
-
-What is a good time to check in with you each day?</value>
+    <value>What is a good time to check in with you each day?</value>
   </data>
   <data name="AskToJoinLetter" xml:space="preserve">
     <value>Hi {0},
@@ -138,9 +136,10 @@ At the end of the day I’ll give you a report 📊 of how you spent your time a
 
 You are not a slave of time. You are the master over your time!
 
-Think of me as your Mr Miyagi 🇯🇵 and you as my Daniel-san! As you master a skill, I will teach you a new technique in order to free more time and achieve your goals.
-
-Are you ready to become a DayNinja?</value>
+Think of me as your Mr Miyagi 🇯🇵 and you as my Daniel-san! As you master a skill, I will teach you a new technique in order to free more time and achieve your goals.</value>
+  </data>
+  <data name="AsktoJoinQuestion" xml:space="preserve">
+    <value>Are you ready to become a DayNinja?</value>
   </data>
   <data name="BothSaturdaySunday" xml:space="preserve">
     <value>Both saturday and sunday</value>
@@ -177,6 +176,9 @@ Are you ready to become a DayNinja?</value>
   </data>
   <data name="TenHour" xml:space="preserve">
     <value>10:00</value>
+  </data>
+  <data name="WelcomeOnboard" xml:space="preserve">
+    <value>Awesome! The journey will require discipline and your commitment to improve your life.  I’ll assume you read everything and do everything in order to succeed. Let’s do this!</value>
   </data>
   <data name="YesBringItOn" xml:space="preserve">
     <value>Yes, bring it on!</value>

@@ -70,9 +70,7 @@ namespace HelloWorldBot.Resources {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Awesome! The journey will require discipline and your commitment to improve your life.  I’ll assume you read everything and do everything in order to succeed. Let’s do this!  
-        ///
-        ///What is a good time to check in with you each day?.
+        ///   Looks up a localized string similar to What is a good time to check in with you each day?.
         /// </summary>
         public static string AskTimeForCheckin {
             get {
@@ -94,6 +92,15 @@ namespace HelloWorldBot.Resources {
         public static string AskToJoinLetter {
             get {
                 return ResourceManager.GetString("AskToJoinLetter", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Are you ready to become a DayNinja?.
+        /// </summary>
+        public static string AsktoJoinQuestion {
+            get {
+                return ResourceManager.GetString("AsktoJoinQuestion", resourceCulture);
             }
         }
         
@@ -202,6 +209,15 @@ namespace HelloWorldBot.Resources {
         public static string TenHour {
             get {
                 return ResourceManager.GetString("TenHour", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Awesome! The journey will require discipline and your commitment to improve your life.  I’ll assume you read everything and do everything in order to succeed. Let’s do this!.
+        /// </summary>
+        public static string WelcomeOnboard {
+            get {
+                return ResourceManager.GetString("WelcomeOnboard", resourceCulture);
             }
         }
         
