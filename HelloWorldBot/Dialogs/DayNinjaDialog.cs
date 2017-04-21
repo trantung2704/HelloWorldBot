@@ -594,6 +594,17 @@ namespace HelloWorldBot.Dialogs
 
         }
 
+        [LuisIntent("ResetOnboard")]
+        public async Task ResetOnboard(IDialogContext context, LuisResult result)
+        {
+            context.UserData.RemoveValue(DataKeyManager.IsOnBoard);
+            context.UserData.RemoveValue(DataKeyManager.CheckinTime);
+            context.UserData.RemoveValue(DataKeyManager.CheckinWeekkend);
+
+            await context.PostAsync("Onboard process has been reseted");
+            context.Wait(MessageReceived);
+        }
+
         public void TriggerInformDuration(ResumptionCookie resume, long needInformTaskId)
         {
             var message = $"Inform duration {needInformTaskId}";
@@ -943,7 +954,7 @@ namespace HelloWorldBot.Dialogs
             if (!tags.Any() && !knownAboutTags)
             {
                 var promptOptions = new[] { "Tell me more", "Yes, I know" };
-                var dialog = new PromptDialog.PromptChoice<string>(promptOptions, "Did you know if you can markup tasks by writing #hashtags?", null, 3);
+                var dialog = new PromptDialog.PromptChoice<string>(promptOptions, "Did you know you can include #hashtags in your descriptions to categorise your tasks", null, 3);
                 context.Call(dialog, AfterOfferKnowAboutTags);
             }
             else if (tags.Any() && capitalisedWords.Any())
@@ -1184,15 +1195,19 @@ namespace HelloWorldBot.Dialogs
                     BackgroundJob.Schedule(() => SendMessageToBot(resumptionCookie, message), TimeSpan.FromMinutes(60));
                     break;
                 case "I will comeback tomorrow":
-                    var clientTime = await DateTimeOffsetNow(context);
-                    if ( clientTime.Hour < 8)
+
+                    var tasks = taskService.GetTasks(context.Activity.From.Id);
+
+                    var tagReports = await CalculateTagReport(context, tasks);
+
+                    foreach (var tagReport in tagReports)
                     {
-                        BackgroundJob.Schedule(() => SendMessageToBot(resumptionCookie, message), clientTime.Date.AddHours(8));
-                    }                    
-                    else
-                    {
-                        BackgroundJob.Schedule(() => SendMessageToBot(resumptionCookie, message), clientTime.Date.AddHours(32));
-                    }                    
+                        await context.PostAsync($"Today #{tagReport.TagName} {tagReport.TotalHourInDay}hrs, this week {tagReport.TotalHoursInWeek}hrs total, {tagReport.TotalHours}hrs in all time");
+                    }                 
+                    
+
+                    var nextCheckin = await CalculateNextCheckin(context);
+                    BackgroundJob.Schedule(() => SendMessageToBot(resumptionCookie, message), nextCheckin);
                     break;
             }
         }
@@ -1273,25 +1288,26 @@ namespace HelloWorldBot.Dialogs
         private async Task AfterOfferCheckinTime(IDialogContext context, IAwaitable<string> result)
         {
             var choice = await result;
-            if (choice == Language.EightHour)
+             if (choice == Language.EightHour)
             {
-                context.UserData.SetValue(DataKeyManager.CheckinTime, new TimeSpan(8, 0, 0));
+                context.UserData.SetValue(DataKeyManager.CheckinTime, DateTimeOffset.Now.Date.AddHours(8));
             }
             else if (choice == Language.HalfPastEight)
             {
-                context.UserData.SetValue(DataKeyManager.CheckinTime, new TimeSpan(8, 30, 0));
+                var checkinTime = DateTimeOffset.Now.Date.AddHours(8).AddMinutes(30);
+                context.UserData.SetValue(DataKeyManager.CheckinTime, checkinTime);
             }
             else if (choice == Language.NineHour)
             {
-                context.UserData.SetValue(DataKeyManager.CheckinTime, new TimeSpan(9, 0, 0));
+                context.UserData.SetValue(DataKeyManager.CheckinTime, DateTimeOffset.Now.Date.AddHours(9));
             }
             else if (choice == Language.TenHour)
             {
-                context.UserData.SetValue(DataKeyManager.CheckinTime, new TimeSpan(9, 10, 0));
+                context.UserData.SetValue(DataKeyManager.CheckinTime, DateTimeOffset.Now.Date.AddHours(10));
             }
 
             await context.PostAsync(string.Format(Language.InformCheckIntime, choice));
-
+            
             var options = new[]
                           {
                               Language.No,
@@ -1319,8 +1335,110 @@ namespace HelloWorldBot.Dialogs
             }
 
             await context.PostAsync(Language.OkNoted);
+
+            var nextCheckin = await CalculateNextCheckin(context);
+            var resumptionCookie = new ResumptionCookie(context.Activity.AsMessageActivity());
+
+            BackgroundJob.Schedule(() => SendMessageToBot(resumptionCookie, Language.Hi), nextCheckin);
             await Greeting(context, new LuisResult());
         }
+
+        private async Task<DateTimeOffset> CalculateNextCheckin(IDialogContext context)
+        {           
+            var checkinTime = context.UserData.Get<DateTimeOffset>(DataKeyManager.CheckinTime);
+
+            var checkinHour = checkinTime.Hour;
+            var checkinMinute = checkinTime.Minute;
+
+            var checkinWeekend = context.UserData.Get<CheckInWeekend>(DataKeyManager.CheckinWeekkend);
+
+            var clientTime = await DateTimeOffsetNow(context);
+
+            var nextCheckin = clientTime.Date
+                                        .AddHours(checkinHour)
+                                        .AddMinutes(checkinMinute);
+
+            var invalid = true;
+            while (invalid)
+            {
+                if (clientTime > nextCheckin)
+                {
+                    nextCheckin = nextCheckin.AddDays(1);
+                    continue;
+                }
+
+                if (nextCheckin.DayOfWeek == DayOfWeek.Saturday
+                    && checkinWeekend == CheckInWeekend.No)
+                {
+                    nextCheckin = nextCheckin.AddDays(1);
+                    continue;
+                }
+
+                if (nextCheckin.DayOfWeek == DayOfWeek.Sunday
+                    && (checkinWeekend == CheckInWeekend.No || checkinWeekend == CheckInWeekend.Saturday))
+                {
+                    nextCheckin = nextCheckin.AddDays(1);
+                    continue;
+                }
+                invalid = false;
+            }
+
+            return nextCheckin;
+
+        }
+
+        private async Task<List<TagReportModel>> CalculateTagReport(IDialogContext context, IEnumerable<TaskViewModel> tasks)
+        {
+            var tagReports = new List<TagReportModel>();
+
+            foreach (var task in tasks)
+            {
+                var clientTimeToday = await DateTimeOffsetNow(context);
+                var monday = clientTimeToday.StartOfWeek();
+                var sunday = monday.AddDays(7);
+
+                var totalHoursInDay = task.TimeLogs
+                                          .Where(i => i.StartTime.Date == clientTimeToday.Date)
+                                          .Sum(i => (i.StartTime - i.EndTime).TotalHours);
+
+                var totalHoursInWeek = task.TimeLogs
+                                           .Where(i => i.StartTime.Date > monday && i.StartTime.Date < sunday)
+                                           .Sum(i => (i.StartTime - i.EndTime).TotalHours);
+
+                var totalHours = task.TimeLogs.Sum(i => (i.StartTime - i.EndTime).TotalHours);
+
+                foreach (var tag in task.Tags)
+                {
+                    var isExist = tagReports.Any(i => i.TagName == tag);
+                    if (!isExist)
+                    {
+                        tagReports.Add(new TagReportModel
+                        {
+                            TagName = tag,
+                            TotalHourInDay = totalHoursInDay,
+                            TotalHoursInWeek = totalHoursInWeek,
+                            TotalHours = totalHours
+                        });
+                    }
+                    else
+                    {
+                        var tagReport = tagReports.First(i => i.TagName == tag);
+                        tagReport.TotalHourInDay += totalHoursInDay;
+                        tagReport.TotalHoursInWeek += totalHoursInWeek;
+                        tagReport.TotalHours += totalHours;
+                    }
+                }
+            }
+
+            foreach (var tagReportModel in tagReports)
+            {
+                tagReportModel.TotalHourInDay = Math.Round(tagReportModel.TotalHourInDay, 2);
+                tagReportModel.TotalHoursInWeek = Math.Round(tagReportModel.TotalHoursInWeek, 2);
+                tagReportModel.TotalHours = Math.Round(tagReportModel.TotalHours, 2);
+            }
+            return tagReports;
+        }
+
 
         public string GetAuthToken(string appId, string appKey)
         {

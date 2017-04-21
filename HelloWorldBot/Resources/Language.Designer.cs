@@ -125,6 +125,15 @@ namespace HelloWorldBot.Resources {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Hi.
+        /// </summary>
+        public static string Hi {
+            get {
+                return ResourceManager.GetString("Hi", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to I’ll check in with you each workday at {0}.
         /// </summary>
         public static string InformCheckIntime {

@@ -151,6 +151,9 @@ Are you ready to become a DayNinja?</value>
   <data name="HalfPastEight" xml:space="preserve">
     <value>8:30</value>
   </data>
+  <data name="Hi" xml:space="preserve">
+    <value>Hi</value>
+  </data>
   <data name="InformCheckIntime" xml:space="preserve">
     <value>I’ll check in with you each workday at {0}</value>
   </data>
