@@ -682,7 +682,8 @@ namespace HelloWorldBot.Dialogs
 
         private async Task AskToJoin(IDialogContext context)
         {
-            var letter = string.Format(Language.AskToJoinLetter, context.Activity.From.Name);
+            var profile = await GetProfile(context.Activity.From.Id);
+            var letter = string.Format(Language.AskToJoinLetter, profile.Firstname);
             await context.PostAsync(letter);
 
             var options = new[]
