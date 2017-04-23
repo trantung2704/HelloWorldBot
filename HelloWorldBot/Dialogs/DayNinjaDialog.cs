@@ -684,6 +684,7 @@ namespace HelloWorldBot.Dialogs
         {
             var letter = string.Format(Language.AskToJoinLetter, context.Activity.From.Name);
             await context.PostAsync(letter);
+            await context.PostAsync(Language.AskToJoinLetter2);
 
             var options = new[]
                           {

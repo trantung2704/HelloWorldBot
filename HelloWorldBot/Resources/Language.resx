@@ -134,15 +134,16 @@ To get started, I’ll check in with you during your workday to see what you’r
 
 At the end of the day I’ll give you a report 📊 of how you spent your time and tips on how to improve.
 
-You are not a slave of time. You are the master over your time!
-
-Think of me as your Mr Miyagi 🇯🇵 and you as my Daniel-san! As you master a skill, I will teach you a new technique in order to free more time and achieve your goals.</value>
+You are not a slave of time. You are the master over your time!</value>
+  </data>
+  <data name="AskToJoinLetter2" xml:space="preserve">
+    <value>Think of me as your Mr Miyagi 🇯🇵 and you as my Daniel-san! As you master a skill, I will teach you a new technique in order to free more time and achieve your goals.</value>
   </data>
   <data name="AsktoJoinQuestion" xml:space="preserve">
     <value>Are you ready to become a DayNinja?</value>
   </data>
   <data name="BothSaturdaySunday" xml:space="preserve">
-    <value>Both saturday and sunday</value>
+    <value>Both Sat and Sun</value>
   </data>
   <data name="EightHour" xml:space="preserve">
     <value>8:00</value>

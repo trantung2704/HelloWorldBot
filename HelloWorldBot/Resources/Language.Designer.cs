@@ -96,6 +96,15 @@ namespace HelloWorldBot.Resources {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Think of me as your Mr Miyagi 🇯🇵 and you as my Daniel-san! As you master a skill, I will teach you a new technique in order to free more time and achieve your goals..
+        /// </summary>
+        public static string AskToJoinLetter2 {
+            get {
+                return ResourceManager.GetString("AskToJoinLetter2", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Are you ready to become a DayNinja?.
         /// </summary>
         public static string AsktoJoinQuestion {
@@ -105,7 +114,7 @@ namespace HelloWorldBot.Resources {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Both saturday and sunday.
+        ///   Looks up a localized string similar to Both Sat and Sun.
         /// </summary>
         public static string BothSaturdaySunday {
             get {
