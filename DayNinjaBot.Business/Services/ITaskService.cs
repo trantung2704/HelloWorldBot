@@ -15,5 +15,6 @@ namespace DayNinjaBot.Business.Services
         void RemoveTask(long id);
         void RemoveTasks(string userId);
         void UpdateTask(TaskViewModel task);
+        void SetTag(List<string> currentTags, long id);
     }
 }

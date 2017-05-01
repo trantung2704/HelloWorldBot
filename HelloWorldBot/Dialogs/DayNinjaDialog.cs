@@ -682,8 +682,17 @@ namespace HelloWorldBot.Dialogs
 
         private async Task AskToJoin(IDialogContext context)
         {
-            var profile = await GetProfile(context.Activity.From.Id);
-            var letter = string.Format(Language.AskToJoinLetter, profile.Firstname);
+            string letter;
+            if (context.Activity.ChannelId == "facebook")
+            {
+                var profile = await GetProfile(context.Activity.From.Id);                
+                letter = string.Format(Language.AskToJoinLetter, profile.Firstname);
+            }
+            else
+            {
+                letter = string.Format(Language.AskToJoinLetter, "Tran");
+            }
+
             await context.PostAsync(letter);
             await context.PostAsync(Language.AskToJoinLetter2);
 
@@ -806,6 +815,7 @@ namespace HelloWorldBot.Dialogs
 
                     var task = taskService.GetTask(currentTask.Id);
                     task.Tags = currentTags;
+                    taskService.SetTag(currentTags, currentTask.Id);
                     if (currentTags.Count == 1)
                     {
                         await context.PostAsync($"{currentTags.Count} tag has been linked to task");
@@ -846,7 +856,10 @@ namespace HelloWorldBot.Dialogs
                     }
 
                     var task = taskService.GetTask(currentTask.Id);
+
                     task.Tags = currentTags;
+                    taskService.SetTag(currentTags, currentTask.Id);
+
                     await context.PostAsync($"{currentTags.Count} tags has been link to task");
 
                     context.UserData.SetValue(DataKeyManager.CurrentTags, new List<string>());                    
@@ -1085,14 +1098,6 @@ namespace HelloWorldBot.Dialogs
                 var responseString = await httpClient.GetStringAsync(url);
                 var profile = JsonConvert.DeserializeObject<FacebookUserProfile>(responseString);
                 return profile;
-
-                //var profilePicture = profile.ProfilePicture.Split(new[] { ".jpg" }, StringSplitOptions.None)
-                //                            .First()
-                //                            .Split('/')
-                //                            .Last();
-
-                //return $"{profilePicture}.jpg";
-
             }
             catch (Exception)
             {
@@ -1405,13 +1410,13 @@ namespace HelloWorldBot.Dialogs
 
                 var totalHoursInDay = task.TimeLogs
                                           .Where(i => i.StartTime.Date == clientTimeToday.Date)
-                                          .Sum(i => (i.StartTime - i.EndTime).TotalHours);
+                                          .Sum(i => (i.EndTime - i.StartTime).TotalHours);
 
                 var totalHoursInWeek = task.TimeLogs
                                            .Where(i => i.StartTime.Date > monday && i.StartTime.Date < sunday)
                                            .Sum(i => (i.StartTime - i.EndTime).TotalHours);
 
-                var totalHours = task.TimeLogs.Sum(i => (i.StartTime - i.EndTime).TotalHours);
+                var totalHours = task.TimeLogs.Sum(i => (i.EndTime - i.StartTime).TotalHours);
 
                 foreach (var tag in task.Tags)
                 {

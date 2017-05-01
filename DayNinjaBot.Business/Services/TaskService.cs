@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data.Entity;
 using System.Linq;
 using DayNinjaBot.Data;
 using DayNinjaBot.Data.Entites;
@@ -126,6 +127,18 @@ namespace DayNinjaBot.Business.Services
            entity.Tags = task.Tags ?? new List<string>();
            entity.UserId = task.UserId;
            entity.TotalTime = task.TotalTime;
+        }
+
+        public void SetTag(List<string> currentTags, long id)
+        {
+            var task = db.Tasks.Find(id);
+
+            if (task != null)
+            {
+                task.Tags = currentTags;
+                db.Entry(task).State = EntityState.Modified;
+                db.SaveChanges();
+            }            
         }
 
         public void AddTimeLog(TimeLogViewModel timeLogViewModel, long taskId)
