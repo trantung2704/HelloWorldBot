@@ -68,14 +68,14 @@ namespace HelloWorldBot.Dialogs
         [LuisIntent("None")]        
         public async Task None(IDialogContext context, LuisResult result)
         {
-            context.UserData.SetValue(DataKeyManager.LastAction, DateTimeOffsetNow(context));
+            context.UserData.SetValue(DataKeyManager.LastAction, (await DateTimeOffsetNow(context)).ToString());
             await context.PostAsync("Sorry I dont understand you.");
             context.Wait(MessageReceived);
         }
 
         [LuisIntent("Greeting")]
         public async Task Greeting(IDialogContext context, LuisResult result)
-        {
+        {            
             bool isOnboard;
             if (!context.UserData.TryGetValue(DataKeyManager.IsOnBoard, out isOnboard))
             {
@@ -87,14 +87,16 @@ namespace HelloWorldBot.Dialogs
                 return;
             }
 
-            DateTimeOffset lastUpdate;
-            var canGetLastUpdate = context.UserData.TryGetValue(DataKeyManager.LastAction, out lastUpdate);
+            string lastUpdateString;
+           
+            var canGetLastUpdate = context.UserData.TryGetValue(DataKeyManager.LastAction, out lastUpdateString);
+            var lastUpdate = !string.IsNullOrEmpty(lastUpdateString)? DateTimeOffset.Parse(lastUpdateString):new DateTimeOffset();
 
             if (!canGetLastUpdate || lastUpdate.Date !=  await DateTimeOffsetNow(context))
             {                
                 await context.PostAsync("Hey Ninja!  Ready to be productive today? ");                                
             }
-            context.UserData.SetValue(DataKeyManager.LastAction, await DateTimeOffsetNow(context));
+            context.UserData.SetValue(DataKeyManager.LastAction, (await DateTimeOffsetNow(context)).ToString());
 
             TaskViewModel currentTask;
             if (context.UserData.TryGetValue(DataKeyManager.CurrentTask, out currentTask))
@@ -137,7 +139,7 @@ namespace HelloWorldBot.Dialogs
         [LuisIntent("WhatAreTags")]
         public async Task WhatAreTags(IDialogContext context, LuisResult result)
         {
-            context.UserData.SetValue(DataKeyManager.LastAction, await DateTimeOffsetNow(context));
+            context.UserData.SetValue(DataKeyManager.LastAction, (await DateTimeOffsetNow(context)).ToString());
             var card = new HeroCard
                        {
                            Title = "What are tags?",
@@ -165,7 +167,7 @@ namespace HelloWorldBot.Dialogs
         [LuisIntent("HowCanI")]
         public async Task HowCanI(IDialogContext context, LuisResult result)
         {
-            context.UserData.SetValue(DataKeyManager.LastAction, await DateTimeOffsetNow(context));
+            context.UserData.SetValue(DataKeyManager.LastAction, (await DateTimeOffsetNow(context)).ToString());
             var card = new HeroCard
             {
                 Title = "Faq",
@@ -195,7 +197,7 @@ namespace HelloWorldBot.Dialogs
         {
             try
             {
-                context.UserData.SetValue(DataKeyManager.LastAction, await DateTimeOffsetNow(context));
+                context.UserData.SetValue(DataKeyManager.LastAction, (await DateTimeOffsetNow(context)).ToString());
                 var userId = context.Activity.From.Id;
                 EntityRecommendation taskDescriptionEntity;
                 if (result.TryFindEntity(LuisEntities.TaskTitle, out taskDescriptionEntity))
@@ -251,7 +253,7 @@ namespace HelloWorldBot.Dialogs
         [LuisIntent("ListTasks")]
         public async Task ListTasks(IDialogContext context, LuisResult result)
         {
-            context.UserData.SetValue(DataKeyManager.LastAction, await DateTimeOffsetNow(context));
+            context.UserData.SetValue(DataKeyManager.LastAction, (await DateTimeOffsetNow(context)).ToString());
             TaskViewModel task;
             var remainTaskCount = taskService.GetTaskCount(context.Activity.From.Id);
             if (context.UserData.TryGetValue(DataKeyManager.CurrentTask, out task))
@@ -293,7 +295,7 @@ namespace HelloWorldBot.Dialogs
         [LuisIntent("PauseTimer")]
         public async Task PauseTimer(IDialogContext context, LuisResult result)
         {
-            context.UserData.SetValue(DataKeyManager.LastAction, await DateTimeOffsetNow(context));
+            context.UserData.SetValue(DataKeyManager.LastAction, (await DateTimeOffsetNow(context)).ToString());
             TaskViewModel currentTask;
             if (!context.UserData.TryGetValue(DataKeyManager.CurrentTask, out currentTask))
             {
@@ -313,7 +315,7 @@ namespace HelloWorldBot.Dialogs
         [LuisIntent("StopTimer")]
         public async Task StopTimer(IDialogContext context, LuisResult result)
         {
-            context.UserData.SetValue(DataKeyManager.LastAction, await DateTimeOffsetNow(context));
+            context.UserData.SetValue(DataKeyManager.LastAction, (await DateTimeOffsetNow(context)).ToString());
             TaskViewModel currentTask;
             if (!context.UserData.TryGetValue(DataKeyManager.CurrentTask, out currentTask))
             {
@@ -332,7 +334,7 @@ namespace HelloWorldBot.Dialogs
         [LuisIntent("ResumeTimer")]
         public async Task ResumeTimer(IDialogContext context, LuisResult result)
         {
-            context.UserData.SetValue(DataKeyManager.LastAction, await DateTimeOffsetNow(context));
+            context.UserData.SetValue(DataKeyManager.LastAction, (await DateTimeOffsetNow(context)).ToString());
             TaskViewModel pausedTask;
             if (!context.UserData.TryGetValue(DataKeyManager.PausedTask, out pausedTask))
             {
@@ -359,7 +361,7 @@ namespace HelloWorldBot.Dialogs
         [LuisIntent("AddTask")]
         public async Task AddTask(IDialogContext context, LuisResult result)
         {
-            context.UserData.SetValue(DataKeyManager.LastAction, await DateTimeOffsetNow(context));
+            context.UserData.SetValue(DataKeyManager.LastAction, (await DateTimeOffsetNow(context)).ToString());
             var taskQuery = new TaskQuery();
 
             var taskForm = new FormDialog<TaskQuery>(taskQuery, BuildTaskForm, FormOptions.PromptInStart);
@@ -369,7 +371,7 @@ namespace HelloWorldBot.Dialogs
         [LuisIntent("StartTimer")]
         public async Task StartTimer(IDialogContext context, LuisResult result)
         {
-            context.UserData.SetValue(DataKeyManager.LastAction, await DateTimeOffsetNow(context));
+            context.UserData.SetValue(DataKeyManager.LastAction, (await DateTimeOffsetNow(context)).ToString());
             EntityRecommendation taskTitleWithTagsEntity;
 
             result.TryFindEntity(LuisEntities.TaskTitle, out taskTitleWithTagsEntity);
@@ -412,7 +414,7 @@ namespace HelloWorldBot.Dialogs
         [LuisIntent("ListMyTags")]
         public async Task ListMyTags(IDialogContext context, LuisResult result)
         {
-            context.UserData.SetValue(DataKeyManager.LastAction, await DateTimeOffsetNow(context));
+            context.UserData.SetValue(DataKeyManager.LastAction, (await DateTimeOffsetNow(context)).ToString());
             TaskViewModel currenTask;
             if(!context.UserData.TryGetValue(DataKeyManager.CurrentTask, out currenTask))
             {
@@ -540,7 +542,7 @@ namespace HelloWorldBot.Dialogs
         [LuisIntent("StopWorking")]
         public async Task StopWorking(IDialogContext context, LuisResult result)
         {
-            context.UserData.SetValue(DataKeyManager.LastAction, await DateTimeOffsetNow(context));
+            context.UserData.SetValue(DataKeyManager.LastAction, (await DateTimeOffsetNow(context)).ToString());
             TaskViewModel currentTask;
             if (context.UserData.TryGetValue(DataKeyManager.CurrentTask, out currentTask))
             {
@@ -578,12 +580,15 @@ namespace HelloWorldBot.Dialogs
                 return;
             }
 
-            DateTimeOffset lastAction;
-            if (!context.UserData.TryGetValue(DataKeyManager.LastAction, out lastAction))
+            string lastActionString;
+            var canGetLastAction = context.UserData.TryGetValue(DataKeyManager.LastAction, out lastActionString);
+            if (!canGetLastAction)
             {
                 context.Wait(MessageReceived);
                 return;
             }
+
+            var lastAction = DateTimeOffset.Parse(lastActionString);
 
             var beingTrackedFocusTime = (DateTimeOffset.UtcNow - informDuartionStarTime).TotalMinutes;
             var options = new[] { "Yes", "No" };
@@ -1238,13 +1243,15 @@ namespace HelloWorldBot.Dialogs
                         return;
                     }
 
-                    DateTimeOffset lastAction;
-                    if (!context.UserData.TryGetValue(DataKeyManager.LastAction, out lastAction))
+                    string lastActionString;
+                    var canGetLastAction = context.UserData.TryGetValue(DataKeyManager.LastAction, out lastActionString);
+                    if (!canGetLastAction)
                     {
                         await context.PostAsync("Add time log fail because cant get LastAction");
                         context.Wait(MessageReceived);
                         return;
                     }
+                    var lastAction = DateTimeOffset.Parse(lastActionString);
 
                     var currentTask = context.UserData.Get<TaskViewModel>(DataKeyManager.CurrentTask);
 
