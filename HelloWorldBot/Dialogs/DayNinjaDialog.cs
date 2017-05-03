@@ -525,6 +525,12 @@ namespace HelloWorldBot.Dialogs
             }
             var suggestResumeTaskId = int.Parse(suggestResumeTaskIdEntity.Entity);
 
+            bool isStopWorking;
+            if (!context.UserData.TryGetValue(DataKeyManager.CurrentTask, out isStopWorking) || isStopWorking)
+            {
+                context.Wait(MessageReceived);
+                return;
+            }
 
             TaskViewModel pausedTask;
             if (!context.UserData.TryGetValue(DataKeyManager.PausedTask, out pausedTask)
@@ -538,7 +544,7 @@ namespace HelloWorldBot.Dialogs
             var dialog = new PromptDialog.PromptChoice<string>(options, $"Let's get back to work on {pausedTask.Description}", null, 3);
             context.Call(dialog, AfterOfferResumeAfterPasue);
         }
-
+                                     
         [LuisIntent("StopWorking")]
         public async Task StopWorking(IDialogContext context, LuisResult result)
         {
@@ -625,7 +631,9 @@ namespace HelloWorldBot.Dialogs
         public async Task StartTrackTimeProcesses(IDialogContext context)
         {
             TaskViewModel currentTask = context.UserData.Get<TaskViewModel>(DataKeyManager.CurrentTask);
+
             context.UserData.SetValue(DataKeyManager.InformDurationStartTime, await DateTimeOffsetNow(context));
+            context.UserData.SetValue(DataKeyManager.StopWorking, false);
 
             var midnight = await DateTimeOffsetNow(context);
             midnight = midnight.Date.AddHours(24);
@@ -1222,6 +1230,8 @@ namespace HelloWorldBot.Dialogs
 
                     var nextCheckin = await CalculateNextCheckin(context);
                     BackgroundJob.Schedule(() => SendMessageToBot(resumptionCookie, message), nextCheckin);
+                    context.UserData.SetValue(DataKeyManager.StopWorking, true);
+
                     break;
             }
         }

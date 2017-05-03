@@ -27,5 +27,7 @@
         public static string CheckinTime => "CheckinTime";
 
         public static string CheckinWeekkend => "CheckinWeekend";
+
+        public static string StopWorking => "StopWorking";
     }
 }
